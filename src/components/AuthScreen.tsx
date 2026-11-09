@@ -18,7 +18,7 @@ export function AuthScreen({ mode }: { mode: Mode }) {
   const [code, setCode] = useState('');
   const [sentEmail, setSentEmail] = useState('');
   const [expiresAt, setExpiresAt] = useState(0);
-  const [now, setNow] = useState(Date.now());
+  const [now, setNow] = useState(0);
   const [busy, setBusy] = useState(false);
   const [role, setRole] = useState<'student' | 'teacher'>('student');
   const [focused, setFocused] = useState(false);
@@ -74,7 +74,7 @@ export function AuthScreen({ mode }: { mode: Mode }) {
           <Button label={mode === 'role' ? '시작하기' : title} disabled={busy} onPress={submit} />
           {mode !== 'role' && <Text style={styles.switchText}>{mode === 'login' ? '계정이 없나요? ' : '이미 계정이 있나요? '}<Text accessibilityRole="link" style={styles.switchLink} onPress={() => router.replace(mode === 'login' ? '/signup' : '/')}>{mode === 'login' ? '회원가입' : '로그인'}</Text></Text>}
         </View>
-        <Text style={styles.footer}>서비스 소개  ·  FAQ  ·  이용약관  ·  개인정보 처리방침</Text>
+        <Text style={styles.footer}><Text accessibilityRole="link" onPress={() => router.push('/about')}>서비스 소개</Text>  ·  <Text accessibilityRole="link" onPress={() => router.push('/faq')}>FAQ</Text>  ·  <Text accessibilityRole="link" onPress={() => router.push('/terms')}>이용약관</Text>  ·  <Text accessibilityRole="link" onPress={() => router.push('/privacy')}>개인정보 처리방침</Text></Text>
       </ScrollView>
     </KeyboardAvoidingView>
   </SafeAreaView>;
