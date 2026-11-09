@@ -1,5 +1,6 @@
 import { Image } from 'expo-image';
 import { useState } from 'react';
+import { router } from 'expo-router';
 import { Alert, Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
@@ -22,7 +23,7 @@ export function HomeScreen({ role }: { role: Role }) {
   return <SafeAreaView edges={['top', 'bottom']} style={styles.safe}>
     <View style={styles.header}>
       <Image source={require('../../assets/figma/logo.svg')} style={styles.logo} contentFit="contain" accessibilityLabel="Refit" />
-      <View style={styles.actions}><Pressable accessibilityRole="button" accessibilityLabel="알림" onPress={() => Alert.alert('준비 중', '알림 기능은 준비 중이에요.')}><Image source={require('../../assets/figma/bell.svg')} style={styles.bell} contentFit="contain" /></Pressable><Pressable accessibilityRole="button" accessibilityLabel="프로필" onPress={() => Alert.alert('준비 중', '프로필 기능은 준비 중이에요.')} style={styles.avatar}><Image source={require('../../assets/figma/avatar.svg')} style={StyleSheet.absoluteFill} contentFit="contain" /><Text style={styles.avatarText}>학</Text></Pressable></View>
+      <View style={styles.actions}><Pressable accessibilityRole="button" accessibilityLabel="알림" onPress={() => Alert.alert('준비 중', '알림 기능은 준비 중이에요.')}><Image source={require('../../assets/figma/bell.svg')} style={styles.bell} contentFit="contain" /></Pressable><Pressable accessibilityRole="button" accessibilityLabel="프로필" onPress={() => router.push('/profile')} style={styles.avatar}><Image source={require('../../assets/figma/avatar.svg')} style={StyleSheet.absoluteFill} contentFit="contain" /><Text style={styles.avatarText}>학</Text></Pressable></View>
     </View>
     <ScrollView contentContainerStyle={styles.content}>
       <View style={styles.calendar}>
