@@ -5,32 +5,39 @@ import { router } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { Alert, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useSession } from '../auth/Session';
+import { useSession, type Session } from '../auth/Session';
 import { emailApi } from '../services/email';
 import { baseUrl } from '../services/http';
 import { userApi, type UserProfile } from '../services/user';
 
 type Page = 'view' | 'edit' | 'delete';
-export function ProfileScreen({ page, notifications, notificationActions }: { page: Page; notifications?: NotificationItem[]; notificationActions?: NotificationActions }) {
+type ProfileProps = { page: Page; notifications?: NotificationItem[]; notificationActions?: NotificationActions };
+export function ProfileScreen(props: ProfileProps) {
+  const { session } = useSession();
+  return <ProfileBody key={session ? `user-${session.user.id}` : 'guest'} {...props} />;
+}
+function ProfileBody({ page, notifications, notificationActions }: ProfileProps) {
   const { session, setSession } = useSession();
-  const [profile, setProfile] = useState<UserProfile | null>(null);
+  const [result, setResult] = useState<{ session: Session; profile?: UserProfile; error?: string } | null>(null);
+  const current = result?.session === session ? result : null;
+  const profile = current?.profile ?? null;
+  const error = current?.error ?? '';
   const [name, setName] = useState('');
   const [code, setCode] = useState('');
   const [confirmation, setConfirmation] = useState('');
   const [busy, setBusy] = useState(false);
-  const [error, setError] = useState('');
   useEffect(() => {
     if (!session) return;
     let active = true;
     userApi.get(session.user.id, session.accessToken).then(user => {
       if (!active) return;
       if (!user) throw new Error('프로필 정보를 확인할 수 없어요.');
-      setProfile(user); setName(user.name); setError('');
-    }).catch(e => { if (active) setError(e instanceof Error ? e.message : '프로필을 불러오지 못했어요.'); });
+      setResult({ session, profile: user }); setName(user.name);
+    }).catch(e => { if (active) setResult({ session, error: e instanceof Error ? e.message : '프로필을 불러오지 못했어요.' }); });
     return () => { active = false; };
   }, [session]);
   async function save() {
-    if (!session) return Alert.alert('로그인이 필요해요.');
+    if (!session || !profile) return Alert.alert('프로필 정보를 먼저 불러와야 해요.');
     const nextName = name.trim();
     if (!nextName || nextName.length > 50) return Alert.alert('이름은 1~50자로 입력해주세요.');
     setBusy(true);
@@ -49,7 +56,7 @@ export function ProfileScreen({ page, notifications, notificationActions }: { pa
       const uploaded = await userApi.upload(asset, session.accessToken);
       await userApi.updateImage(uploaded.imageUrl, session.accessToken);
       const updated = await userApi.get(session.user.id, session.accessToken);
-      if (updated) setProfile(updated);
+      if (updated) setResult({ session, profile: updated });
     } catch (e) { Alert.alert('사진 변경 실패', e instanceof Error ? e.message : '다시 시도해주세요.'); }
     finally { setBusy(false); }
   }
@@ -92,7 +99,7 @@ export function ProfileScreen({ page, notifications, notificationActions }: { pa
         <Pressable style={styles.neutralButton} onPress={() => router.push('/profile-edit')}><Text style={styles.neutralText}>정보 수정</Text></Pressable><Pressable disabled={busy} onPress={beginRemoval}><Text style={styles.deleteLink}>계정 삭제</Text></Pressable>
       </> : page === 'edit' ? <>
         <Text style={styles.label}>프로필 사진</Text><Pressable onPress={changePhoto} disabled={busy} style={styles.editPhoto}><Image source={imageUri ? { uri: imageUri } : require('../../assets/figma/edit-photo.svg')} style={StyleSheet.absoluteFill} contentFit="cover" />{!imageUri && <Text style={styles.editPhotoText}>사진 변경</Text>}</Pressable>
-        <Text style={styles.label}>이름</Text><TextInput accessibilityLabel="이름" value={name} onChangeText={setName} maxLength={50} placeholder="이름" placeholderTextColor="#999" style={styles.input} />
+        <Text style={styles.label}>이름</Text><TextInput accessibilityLabel="이름" value={profile ? name : ''} onChangeText={setName} maxLength={50} placeholder="이름" placeholderTextColor="#999" style={styles.input} />
         <Text style={styles.label}>이메일</Text><TextInput accessibilityLabel="이메일" value={profile?.emailId ?? ''} editable={false} placeholder="이메일" placeholderTextColor="#999" style={styles.input} />
         <Pressable disabled={busy} onPress={save} style={styles.primaryButton}><Text style={styles.buttonText}>저장</Text></Pressable><Pressable onPress={() => router.back()}><Text style={styles.cancel}>취소</Text></Pressable>
       </> : <>
