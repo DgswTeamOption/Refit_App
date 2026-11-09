@@ -16,7 +16,7 @@ export default function ClassPage() {
   const teacher = role === 'teacher';
   const id = classId && /^\d+$/.test(classId) && Number(classId) > 0 ? Number(classId) : undefined;
   const author = session?.user.name ?? localUser?.name ?? (teacher ? '선생님' : '학생');
-  const { addNotice, updateNotice, removeNotice, addRequest, cancelRequest, addAvailability, removeAvailability, markAllRead, setRequestStatus, markAttendance, addSchedule } = store;
+  const { addNotice, updateNotice, removeNotice, addRequest, cancelRequest, addAvailability, updateAvailability, removeAvailability, markAllRead, setRequestStatus, markAttendance, addSchedule } = store;
   const { requestsOf, availabilityOf, membersOf, attendanceOf } = store;
   const today = useMemo(() => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; }, []);
   const members = useMemo(() => id === undefined ? [] : membersOf(id), [id, membersOf]);
@@ -88,7 +88,8 @@ export default function ClassPage() {
     onCreateLocalSchedule={id === undefined ? undefined : input => addSchedule(id, input)}
     attendanceRows={attendance.filter(a => a.student === author).map(a => ({ id: `${a.student}-${a.date}`, cells: [a.date, { label: a.status === 'present' ? '출석' : '결석', tone: a.status === 'present' ? 'blue' as const : 'red' as const }] }))}
     attendanceSummary={{ present: attendance.filter(a => a.status === 'present' && a.date.slice(0, 7) === today.slice(0, 7)).length, absent: attendance.filter(a => a.status === 'absent' && a.date.slice(0, 7) === today.slice(0, 7)).length }}
-    onSaveAvailability={id === undefined ? undefined : async input => addAvailability(id, input)}
+    availability={availability}
+    onSaveAvailability={id === undefined ? undefined : async (input, availabilityId) => { if (availabilityId) updateAvailability(id, availabilityId, input); else addAvailability(id, input); }}
     notifications={store.notifications} notificationActions={{ markAllRead: async () => markAllRead() }}
     calendarMarks={calendarMarks}
   />;

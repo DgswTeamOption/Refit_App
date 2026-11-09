@@ -33,6 +33,7 @@ type Value = {
   cancelRequest: (classId: number, id: string) => void;
   availabilityOf: (classId: number) => StoredAvailability[];
   addAvailability: (classId: number, input: Omit<StoredAvailability, 'id'>) => void;
+  updateAvailability: (classId: number, id: string, input: Omit<StoredAvailability, 'id'>) => void;
   removeAvailability: (classId: number, id: string) => void;
   schedulesOf: (classId: number) => Schedule[];
   addSchedule: (classId: number, input: { studentId: number; startTime: string; endTime: string }) => void;
@@ -114,6 +115,7 @@ export function ClassesProvider({ children }: { children: ReactNode }) {
   const cancelRequest = useCallback((classId: number, id: string) => setRequests(prev => ({ ...prev, [classId]: (prev[classId] ?? []).filter(r => r.id !== id) })), []);
   const availabilityOf = useCallback((classId: number) => availability[classId] ?? [], [availability]);
   const addAvailability = useCallback((classId: number, input: Omit<StoredAvailability, 'id'>) => setAvailability(prev => ({ ...prev, [classId]: [...(prev[classId] ?? []), { ...input, id: `${classId}-${uid()}` }] })), []);
+  const updateAvailability = useCallback((classId: number, id: string, input: Omit<StoredAvailability, 'id'>) => setAvailability(prev => ({ ...prev, [classId]: (prev[classId] ?? []).map(item => item.id === id ? { ...item, ...input } : item) })), []);
   const removeAvailability = useCallback((classId: number, id: string) => setAvailability(prev => ({ ...prev, [classId]: (prev[classId] ?? []).filter(a => a.id !== id) })), []);
   const schedulesOf = useCallback((classId: number) => schedules[classId] ?? [], [schedules]);
   const addSchedule = useCallback((classId: number, input: { studentId: number; startTime: string; endTime: string }) => {
@@ -121,7 +123,7 @@ export function ClassesProvider({ children }: { children: ReactNode }) {
   }, []);
   const markAllRead = useCallback(() => setNotifications(prev => prev.map(n => ({ ...n, read: true }))), []);
   const studentClasses = useMemo(() => classes.filter(c => joined.includes(c.id)), [classes, joined]);
-  const value = useMemo(() => ({ teacherClasses: classes, studentClasses, createClass, joinClass, deleteClass, leaveClass, noticesOf, addNotice, updateNotice, removeNotice, schedulesOf, addSchedule, requestsOf, addRequest, setRequestStatus, membersOf, attendanceOf, markAttendance, cancelRequest, availabilityOf, addAvailability, removeAvailability, notifications, markAllRead }), [classes, studentClasses, createClass, joinClass, deleteClass, leaveClass, noticesOf, addNotice, updateNotice, removeNotice, schedulesOf, addSchedule, requestsOf, addRequest, setRequestStatus, membersOf, attendanceOf, markAttendance, cancelRequest, availabilityOf, addAvailability, removeAvailability, notifications, markAllRead]);
+  const value = useMemo(() => ({ teacherClasses: classes, studentClasses, createClass, joinClass, deleteClass, leaveClass, noticesOf, addNotice, updateNotice, removeNotice, schedulesOf, addSchedule, requestsOf, addRequest, setRequestStatus, membersOf, attendanceOf, markAttendance, cancelRequest, availabilityOf, addAvailability, updateAvailability, removeAvailability, notifications, markAllRead }), [classes, studentClasses, createClass, joinClass, deleteClass, leaveClass, noticesOf, addNotice, updateNotice, removeNotice, schedulesOf, addSchedule, requestsOf, addRequest, setRequestStatus, membersOf, attendanceOf, markAttendance, cancelRequest, availabilityOf, addAvailability, updateAvailability, removeAvailability, notifications, markAllRead]);
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }
 export function useClasses() {

@@ -6,6 +6,7 @@ import { DateTimeField } from './DateTimeField';
 import { TeacherTable, type TeacherAction, type TeacherRow } from './TeacherTable';
 
 export type AvailabilityInput = { date: string; startTime: string; endTime: string };
+export type AvailabilityItem = AvailabilityInput & { id: string };
 export type TeacherTab = '학생' | '결석정보' | '출석' | '보강' | '보강설정';
 const headings: Record<TeacherTab, string[]> = {
   학생: ['학생', '보강/결석', '최근 결석'],
@@ -14,12 +15,13 @@ const headings: Record<TeacherTab, string[]> = {
   보강: ['학생', '날짜/시간', '상태'],
   보강설정: ['날짜', '시간', '관리'],
 };
-export function TeacherManagement({ tab, addingAvailability, onAvailabilityChange, rows = [], onAction, onSaveAvailability }: { tab: TeacherTab; addingAvailability: boolean; onAvailabilityChange: (active: boolean) => void; rows?: TeacherRow[]; onAction?: TeacherAction; onSaveAvailability?: (input: AvailabilityInput) => Promise<void> }) {
+export function TeacherManagement({ tab, addingAvailability, onAvailabilityChange, rows = [], availability = [], onAction, onSaveAvailability }: { tab: TeacherTab; addingAvailability: boolean; onAvailabilityChange: (active: boolean) => void; rows?: TeacherRow[]; availability?: AvailabilityItem[]; onAction?: TeacherAction; onSaveAvailability?: (input: AvailabilityInput, id?: string) => Promise<void> }) {
   const [busy, setBusy] = useState(false);
   const [query, setQuery] = useState('');
   const [dateValue, setDateValue] = useState('');
   const [startTime, setStartTime] = useState('');
   const [endTime, setEndTime] = useState('');
+  const [editingId, setEditingId] = useState<string>();
   const [today] = useState(() => new Date());
   const date = `${today.getFullYear()}년 ${today.getMonth() + 1}월 ${today.getDate()}일`;
   async function saveAvailability() {
@@ -28,7 +30,7 @@ export function TeacherManagement({ tab, addingAvailability, onAvailabilityChang
     if (!start.isValid() || !end.isValid() || !end.isAfter(start)) return Alert.alert('날짜와 시간을 확인해주세요.');
     if (!onSaveAvailability) return Alert.alert('준비 중', '보강 가능 시간 저장 기능은 준비 중이에요.');
     setBusy(true);
-    try { await onSaveAvailability({ date: dateValue, startTime, endTime }); onAvailabilityChange(false); }
+    try { await onSaveAvailability({ date: dateValue, startTime, endTime }, editingId); onAvailabilityChange(false); }
     catch (e) { Alert.alert('저장 실패', e instanceof Error ? e.message : '다시 시도해주세요.'); }
     finally { setBusy(false); }
   }
@@ -37,7 +39,7 @@ export function TeacherManagement({ tab, addingAvailability, onAvailabilityChang
     <Text style={styles.label}>시작 시간</Text><DateTimeField mode="time" value={startTime} onChange={setStartTime} />
     <Text style={styles.label}>종료 시간</Text><DateTimeField mode="time" value={endTime} onChange={setEndTime} />
     <Pressable disabled={busy} style={styles.save} onPress={saveAvailability}><Image source={require('../../assets/figma/apply-button.svg')} style={StyleSheet.absoluteFill} contentFit="fill" /><Text style={styles.buttonText}>저장</Text></Pressable>
-    <Text style={styles.registered}>등록된 가능 시간</Text>{rows.length ? rows.map(row => <View key={row.id} style={styles.availabilityCard}><Image source={require('../../assets/figma/availability-card.svg')} style={StyleSheet.absoluteFill} contentFit="fill" /><View><Text style={styles.availabilityDate}>{typeof row.cells[0] === 'string' ? row.cells[0] : row.cells[0]?.label}</Text><Text style={styles.availabilityTime}>{typeof row.cells[1] === 'string' ? row.cells[1] : row.cells[1]?.label}</Text></View><Pressable onPress={() => onAction ? onAction(row.id, '수정') : Alert.alert('준비 중', '수정 기능은 준비 중이에요.')}><Text style={styles.edit}>수정</Text></Pressable></View>) : <Text style={styles.noAvailability}>등록된 가능 시간이 없어요.</Text>}
+    <Text style={styles.registered}>등록된 가능 시간</Text>{availability.length ? availability.map(item => <View key={item.id} style={styles.availabilityCard}><Image source={require('../../assets/figma/availability-card.svg')} style={StyleSheet.absoluteFill} contentFit="fill" /><View><Text style={styles.availabilityDate}>{item.date}</Text><Text style={styles.availabilityTime}>{item.startTime} ~ {item.endTime}</Text></View><Pressable accessibilityRole="button" onPress={() => { setEditingId(item.id); setDateValue(item.date); setStartTime(item.startTime); setEndTime(item.endTime); }}><Text style={styles.edit}>수정</Text></Pressable></View>) : <Text style={styles.noAvailability}>등록된 가능 시간이 없어요.</Text>}
   </View>;
   return <View style={styles.content}>
     {tab === '학생' && <View style={styles.search}><Image source={require('../../assets/figma/student-search.svg')} style={StyleSheet.absoluteFill} contentFit="fill" /><TextInput accessibilityLabel="학생 이름 검색" value={query} onChangeText={setQuery} placeholder="학생 이름 검색" placeholderTextColor="#aaa" style={styles.searchText} /></View>}
