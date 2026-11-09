@@ -5,7 +5,7 @@ import type { NoticeActions } from '../components/NoticeScreen';
 import type { StudentRequest, StudentRequestActions } from '../components/StudentRequests';
 import type { TeacherTab } from '../components/TeacherManagement';
 import type { TeacherRow } from '../components/TeacherTable';
-import type { CalendarMarks } from '../components/Calendar';
+import { attendanceCalendarMarks } from '../services/calendarMarks';
 import { useSession } from '../auth/Session';
 import { useClasses, type RequestKind } from '../store/Classes';
 
@@ -64,14 +64,7 @@ export default function ClassPage() {
     };
   }, [requests, availability, members, attendance, today]);
 
-  const calendarMarks = useMemo<CalendarMarks>(() => {
-    const marks: CalendarMarks = {};
-    requests.filter(r => r.status !== 'rejected' && (teacher || r.student === author)).forEach(r => {
-      if (/^\d{4}-\d{2}-\d{2}$/.test(r.date)) (marks[r.date] ??= []).push(r.status === 'pending' ? 'pending' : r.status === 'approved' ? (r.kind === 'absence' ? 'absence' : 'makeup') : 'pending');
-    });
-    attendance.filter(a => a.status === 'present' && (teacher || a.student === author)).forEach(a => { (marks[a.date] ??= []).push('attendance'); });
-    return marks;
-  }, [requests, attendance, teacher, author]);
+  const calendarMarks = useMemo(() => attendanceCalendarMarks(requests, attendance, teacher, author), [requests, attendance, teacher, author]);
 
   return <ClassScreen
     role={teacher ? 'teacher' : 'student'} name={name || '수업'} classId={id}
