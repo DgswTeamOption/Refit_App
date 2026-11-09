@@ -7,6 +7,9 @@ export const serverDateFormat = 'YYYY-MM-DD HH:mm:ss';
 export const parseServerDate = (value: string) => dayjs(value, serverDateFormat, true);
 export type Schedule = { scheduleId: number; classId: number; studentId: number; startTime: string; endTime: string };
 export type ScheduleInput = { studentId: number; startTime: string; endTime: string };
+export function scheduleDates(schedules: Schedule[]): string[] {
+  return [...new Set(schedules.map(item => parseServerDate(item.startTime)).filter(date => date.isValid()).map(date => date.format('YYYY-MM-DD')))];
+}
 export const scheduleApi = {
   list: (classId: number, token: string) => request<Schedule[]>(`/api/class/schedule/${classId}`, {}, token),
   calendar: (classId: number, year: number, month: number, token: string) => request<Schedule[]>(`/api/class/calendar/${classId}?year=${year}&month=${month}`, {}, token),

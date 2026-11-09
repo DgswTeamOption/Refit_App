@@ -1,6 +1,8 @@
 import { Image } from 'expo-image';
 import * as ImagePicker from 'expo-image-picker';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
+import { useSession, type Session } from '../auth/Session';
+import { scheduleDates, scheduleApi } from '../services/schedule';
 import { router } from 'expo-router';
 import { Calendar, type CalendarMarks, type ClassCalendarColor } from './Calendar';
 import { NotificationBell, type NotificationActions, type NotificationItem } from './NotificationBell';
@@ -11,16 +13,39 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 type Role = 'student' | 'teacher';
 
 export function HomeScreen({ role, classes = [], notifications, notificationActions }: { role: Role; classes?: ClassSummary[]; notifications?: NotificationItem[]; notificationActions?: NotificationActions }) {
+  const { session } = useSession();
+  const [month, setMonth] = useState(() => { const now = new Date(); return new Date(now.getFullYear(), now.getMonth(), 1); });
+  const [calendarResult, setCalendarResult] = useState<{ session: Session; ids: string; monthKey: string; dates: Record<number, string[]> } | null>(null);
   const [modalVisible, setModalVisible] = useState(false);
   const [value, setValue] = useState('');
   const [banner, setBanner] = useState<ImagePicker.ImagePickerAsset | null>(null);
+  const ids = [...new Set(classes.map(item => item.id).filter(id => Number.isSafeInteger(id) && id > 0))].sort((a, b) => a - b).join(',');
+  const monthKey = `${month.getFullYear()}-${month.getMonth() + 1}`;
+  useEffect(() => {
+    if (!session || !ids) return;
+    let active = true;
+    const [year, monthNumber] = monthKey.split('-').map(Number);
+    const classIds = ids.split(',').map(Number);
+    Promise.allSettled(classIds.map(id => scheduleApi.calendar(id, year, monthNumber, session.accessToken))).then(results => {
+      if (!active) return;
+      const dates: Record<number, string[]> = {};
+      results.forEach((result, index) => {
+        if (result.status !== 'fulfilled') return;
+        dates[classIds[index]] = scheduleDates(result.value ?? []);
+      });
+      setCalendarResult({ session, ids, monthKey, dates });
+      if (results.some(result => result.status === 'rejected')) Alert.alert('일정 조회 실패', '일부 수업 일정을 불러오지 못했어요.');
+    });
+    return () => { active = false; };
+  }, [session, ids, monthKey]);
+  const currentDates = calendarResult && calendarResult.session === session && calendarResult.ids === ids && calendarResult.monthKey === monthKey ? calendarResult.dates : {};
   const teacher = role === 'teacher';
   const colors: ClassCalendarColor[] = ['peach', 'purple', 'yellow', 'mint'];
   const classLegend = classes.map((item, index) => ({ label: item.name, color: item.color ?? colors[index % colors.length] }));
   const calendarMarks: CalendarMarks = {};
   classes.forEach((item, index) => {
     const color = item.color ?? colors[index % colors.length];
-    [...new Set(item.calendarDates ?? [])].forEach(date => {
+    [...new Set(currentDates[item.id] ?? item.calendarDates ?? [])].forEach(date => {
       if (/^\d{4}-\d{2}-\d{2}$/.test(date)) (calendarMarks[date] ??= []).push({ color, label: item.name });
     });
   });
@@ -38,7 +63,7 @@ export function HomeScreen({ role, classes = [], notifications, notificationActi
       <View style={styles.actions}><NotificationBell items={notifications} actions={notificationActions} /><Pressable accessibilityRole="button" accessibilityLabel="프로필" onPress={() => router.push('/profile')} style={styles.avatar}><Image source={require('../../assets/figma/avatar.svg')} style={StyleSheet.absoluteFill} contentFit="contain" /><Text style={styles.avatarText}>학</Text></Pressable></View>
     </View>
     <ScrollView contentContainerStyle={styles.content}>
-      <Calendar marks={calendarMarks} classLegend={classLegend} />
+      <Calendar marks={calendarMarks} classLegend={classLegend} month={month} onMonthChange={setMonth} />
       <View style={styles.sectionHeader}><Text style={styles.sectionTitle}>내 수업</Text><Pressable accessibilityRole="button" onPress={showModal}><Text style={styles.add}>+ {action}</Text></Pressable></View>
       {classes.length ? <ClassCards classes={classes} role={role} /> : <View style={styles.empty}><Text style={styles.emptyText}>아직 참여한 수업이 없어요</Text><Pressable accessibilityRole="button" onPress={showModal} style={styles.emptyButton}><Image source={require('../../assets/figma/home-button.svg')} style={StyleSheet.absoluteFill} contentFit="fill" /><Text style={styles.buttonText}>{action}</Text></Pressable></View>}
     </ScrollView>
