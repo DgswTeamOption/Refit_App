@@ -6,14 +6,17 @@ import type { Notice } from '../components/NoticeScreen';
 export type StoredClass = ClassSummary & { code: string };
 type Input = { title: string; body: string };
 export type RequestKind = 'absence' | 'makeup';
-export type StoredRequest = { id: string; kind: RequestKind; student: string; date: string; reason: string };
+export type RequestStatus = 'pending' | 'approved' | 'rejected';
+export type StoredRequest = { id: string; kind: RequestKind; student: string; date: string; reason: string; status: RequestStatus };
+export type AttendanceStatus = 'present' | 'absent';
+export type StoredAttendance = { student: string; date: string; status: AttendanceStatus };
 export type StoredAvailability = { id: string; date: string; startTime: string; endTime: string };
 export type StoredNotification = { id: string; title: string; body: string; read: boolean };
 type Value = {
   teacherClasses: StoredClass[];
   studentClasses: StoredClass[];
   createClass: (name: string, bannerUrl?: string | null) => StoredClass;
-  joinClass: (code: string) => StoredClass;
+  joinClass: (code: string, student?: string) => StoredClass;
   deleteClass: (id: number) => void;
   leaveClass: (id: number) => void;
   noticesOf: (classId: number) => Notice[];
@@ -21,7 +24,11 @@ type Value = {
   updateNotice: (classId: number, id: string, input: Input) => void;
   removeNotice: (classId: number, id: string) => void;
   requestsOf: (classId: number) => StoredRequest[];
-  addRequest: (classId: number, input: Omit<StoredRequest, 'id'>) => void;
+  addRequest: (classId: number, input: Omit<StoredRequest, 'id' | 'status'>) => void;
+  setRequestStatus: (classId: number, id: string, status: RequestStatus) => void;
+  membersOf: (classId: number) => string[];
+  attendanceOf: (classId: number) => StoredAttendance[];
+  markAttendance: (classId: number, student: string, date: string, status: AttendanceStatus) => void;
   cancelRequest: (classId: number, id: string) => void;
   availabilityOf: (classId: number) => StoredAvailability[];
   addAvailability: (classId: number, input: Omit<StoredAvailability, 'id'>) => void;
@@ -45,6 +52,8 @@ export function ClassesProvider({ children }: { children: ReactNode }) {
   const [nextId, setNextId] = useState(1);
   const [requests, setRequests] = useState<Record<number, StoredRequest[]>>({});
   const [availability, setAvailability] = useState<Record<number, StoredAvailability[]>>({});
+  const [members, setMembers] = useState<Record<number, string[]>>({});
+  const [attendance, setAttendance] = useState<Record<number, StoredAttendance[]>>({});
   const [notifications, setNotifications] = useState<StoredNotification[]>([]);
   const notify = useCallback((title: string, body: string) => setNotifications(prev => [{ id: `n-${Date.now()}-${prev.length}`, title, body, read: false }, ...prev]), []);
   const createClass = useCallback((name: string, bannerUrl?: string | null) => {
@@ -52,11 +61,12 @@ export function ClassesProvider({ children }: { children: ReactNode }) {
     setNextId(nextId + 1); setClasses(prev => [...prev, item]);
     return item;
   }, [classes, nextId]);
-  const joinClass = useCallback((code: string) => {
+  const joinClass = useCallback((code: string, student = '학생') => {
     const item = classes.find(c => c.code === code.trim().toUpperCase());
     if (!item) throw new Error('수업코드를 찾을 수 없어요.');
     if (joined.includes(item.id)) throw new Error('이미 참여한 수업이에요.');
     setJoined(prev => [...prev, item.id]);
+    setMembers(prev => ({ ...prev, [item.id]: (prev[item.id] ?? []).includes(student) ? prev[item.id] : [...(prev[item.id] ?? []), student] }));
     return item;
   }, [classes, joined]);
   const deleteClass = useCallback((id: number) => {
@@ -77,17 +87,26 @@ export function ClassesProvider({ children }: { children: ReactNode }) {
     setNotices(prev => ({ ...prev, [classId]: (prev[classId] ?? []).filter(n => n.id !== id) }));
   }, []);
   const requestsOf = useCallback((classId: number) => requests[classId] ?? [], [requests]);
-  const addRequest = useCallback((classId: number, input: Omit<StoredRequest, 'id'>) => {
-    setRequests(prev => ({ ...prev, [classId]: [...(prev[classId] ?? []), { ...input, id: `${classId}-${Date.now()}` }] }));
+  const addRequest = useCallback((classId: number, input: Omit<StoredRequest, 'id' | 'status'>) => {
+    setRequests(prev => ({ ...prev, [classId]: [...(prev[classId] ?? []), { ...input, id: `${classId}-${Date.now()}`, status: 'pending' as const }] }));
     notify(input.kind === 'absence' ? '결석 신청' : '보강 신청', `${input.student} · ${input.date}`);
   }, [notify]);
+  const setRequestStatus = useCallback((classId: number, id: string, status: RequestStatus) => {
+    setRequests(prev => ({ ...prev, [classId]: (prev[classId] ?? []).map(r => r.id === id ? { ...r, status } : r) }));
+    notify(status === 'approved' ? '신청 승인' : '신청 거절', '신청 처리 결과가 반영됐어요.');
+  }, [notify]);
+  const membersOf = useCallback((classId: number) => members[classId] ?? [], [members]);
+  const attendanceOf = useCallback((classId: number) => attendance[classId] ?? [], [attendance]);
+  const markAttendance = useCallback((classId: number, student: string, date: string, status: AttendanceStatus) => {
+    setAttendance(prev => ({ ...prev, [classId]: [...(prev[classId] ?? []).filter(a => !(a.student === student && a.date === date)), { student, date, status }] }));
+  }, []);
   const cancelRequest = useCallback((classId: number, id: string) => setRequests(prev => ({ ...prev, [classId]: (prev[classId] ?? []).filter(r => r.id !== id) })), []);
   const availabilityOf = useCallback((classId: number) => availability[classId] ?? [], [availability]);
   const addAvailability = useCallback((classId: number, input: Omit<StoredAvailability, 'id'>) => setAvailability(prev => ({ ...prev, [classId]: [...(prev[classId] ?? []), { ...input, id: `${classId}-${Date.now()}` }] })), []);
   const removeAvailability = useCallback((classId: number, id: string) => setAvailability(prev => ({ ...prev, [classId]: (prev[classId] ?? []).filter(a => a.id !== id) })), []);
   const markAllRead = useCallback(() => setNotifications(prev => prev.map(n => ({ ...n, read: true }))), []);
   const studentClasses = useMemo(() => classes.filter(c => joined.includes(c.id)), [classes, joined]);
-  const value = useMemo(() => ({ teacherClasses: classes, studentClasses, createClass, joinClass, deleteClass, leaveClass, noticesOf, addNotice, updateNotice, removeNotice, requestsOf, addRequest, cancelRequest, availabilityOf, addAvailability, removeAvailability, notifications, markAllRead }), [classes, studentClasses, createClass, joinClass, deleteClass, leaveClass, noticesOf, addNotice, updateNotice, removeNotice, requestsOf, addRequest, cancelRequest, availabilityOf, addAvailability, removeAvailability, notifications, markAllRead]);
+  const value = useMemo(() => ({ teacherClasses: classes, studentClasses, createClass, joinClass, deleteClass, leaveClass, noticesOf, addNotice, updateNotice, removeNotice, requestsOf, addRequest, setRequestStatus, membersOf, attendanceOf, markAttendance, cancelRequest, availabilityOf, addAvailability, removeAvailability, notifications, markAllRead }), [classes, studentClasses, createClass, joinClass, deleteClass, leaveClass, noticesOf, addNotice, updateNotice, removeNotice, requestsOf, addRequest, setRequestStatus, membersOf, attendanceOf, markAttendance, cancelRequest, availabilityOf, addAvailability, removeAvailability, notifications, markAllRead]);
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }
 export function useClasses() {
