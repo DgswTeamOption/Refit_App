@@ -12,12 +12,12 @@ import { useClasses, type RequestKind } from '../store/Classes';
 
 export default function ClassPage() {
   const { role, name, classId } = useLocalSearchParams<{ role?: string; name?: string; classId?: string }>();
-  const { session } = useSession();
+  const { session, localUser } = useSession();
   const store = useClasses();
   const teacher = role === 'teacher';
   const id = classId && /^\d+$/.test(classId) && Number(classId) > 0 ? Number(classId) : undefined;
-  const author = session?.user.name ?? (teacher ? '선생님' : '학생');
-  const { addNotice, updateNotice, removeNotice, addRequest, cancelRequest, addAvailability, removeAvailability, markAllRead, setRequestStatus, markAttendance } = store;
+  const author = session?.user.name ?? localUser?.name ?? (teacher ? '선생님' : '학생');
+  const { addNotice, updateNotice, removeNotice, addRequest, cancelRequest, addAvailability, removeAvailability, markAllRead, setRequestStatus, markAttendance, addSchedule } = store;
   const { requestsOf, availabilityOf, membersOf, attendanceOf } = store;
   const today = useMemo(() => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; }, []);
   const members = useMemo(() => id === undefined ? [] : membersOf(id), [id, membersOf]);
@@ -84,6 +84,9 @@ export default function ClassPage() {
       else if ((tab === '결석정보' || tab === '보강') && (action === '승인' || action === '거절')) setRequestStatus(id, rowId, action === '승인' ? 'approved' : 'rejected');
       else if (tab === '출석' && (action === '출석' || action === '결석')) markAttendance(id, rowId, today, action === '출석' ? 'present' : 'absent');
     }}
+    scheduleStudents={members.map((student, index) => ({ id: index + 1, name: student }))}
+    localSchedules={id === undefined ? undefined : store.schedulesOf(id)}
+    onCreateLocalSchedule={id === undefined ? undefined : input => addSchedule(id, input)}
     attendanceRows={attendance.filter(a => a.student === author).map(a => ({ id: `${a.student}-${a.date}`, cells: [a.date, { label: a.status === 'present' ? '출석' : '결석', tone: a.status === 'present' ? 'blue' as const : 'red' as const }] }))}
     attendanceSummary={`이번달 출석 ${attendance.filter(a => a.status === 'present' && a.date.slice(0, 7) === today.slice(0, 7)).length}건 · 결석 ${attendance.filter(a => a.status === 'absent' && a.date.slice(0, 7) === today.slice(0, 7)).length}건`}
     onNfc={id === undefined ? undefined : () => { markAttendance(id, author, today, 'present'); Alert.alert('출석 완료', '오늘 출석이 기록됐어요.'); }}

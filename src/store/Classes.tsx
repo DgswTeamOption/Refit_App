@@ -1,5 +1,6 @@
 import { createContext, useCallback, useContext, useMemo, useState, type ReactNode } from 'react';
 import type { ClassSummary } from '../components/ClassCards';
+import type { Schedule } from '../services/schedule';
 import type { Notice } from '../components/NoticeScreen';
 
 // In-memory store used until the class/notice server APIs exist. Data resets on app restart.
@@ -33,6 +34,8 @@ type Value = {
   availabilityOf: (classId: number) => StoredAvailability[];
   addAvailability: (classId: number, input: Omit<StoredAvailability, 'id'>) => void;
   removeAvailability: (classId: number, id: string) => void;
+  schedulesOf: (classId: number) => Schedule[];
+  addSchedule: (classId: number, input: { studentId: number; startTime: string; endTime: string }) => void;
   notifications: StoredNotification[];
   markAllRead: () => void;
 };
@@ -52,6 +55,7 @@ export function ClassesProvider({ children }: { children: ReactNode }) {
   const [nextId, setNextId] = useState(1);
   const [requests, setRequests] = useState<Record<number, StoredRequest[]>>({});
   const [availability, setAvailability] = useState<Record<number, StoredAvailability[]>>({});
+  const [schedules, setSchedules] = useState<Record<number, Schedule[]>>({});
   const [members, setMembers] = useState<Record<number, string[]>>({});
   const [attendance, setAttendance] = useState<Record<number, StoredAttendance[]>>({});
   const [notifications, setNotifications] = useState<StoredNotification[]>([]);
@@ -104,9 +108,13 @@ export function ClassesProvider({ children }: { children: ReactNode }) {
   const availabilityOf = useCallback((classId: number) => availability[classId] ?? [], [availability]);
   const addAvailability = useCallback((classId: number, input: Omit<StoredAvailability, 'id'>) => setAvailability(prev => ({ ...prev, [classId]: [...(prev[classId] ?? []), { ...input, id: `${classId}-${Date.now()}` }] })), []);
   const removeAvailability = useCallback((classId: number, id: string) => setAvailability(prev => ({ ...prev, [classId]: (prev[classId] ?? []).filter(a => a.id !== id) })), []);
+  const schedulesOf = useCallback((classId: number) => schedules[classId] ?? [], [schedules]);
+  const addSchedule = useCallback((classId: number, input: { studentId: number; startTime: string; endTime: string }) => {
+    setSchedules(prev => ({ ...prev, [classId]: [...(prev[classId] ?? []), { ...input, classId, scheduleId: Date.now() + (prev[classId]?.length ?? 0) }] }));
+  }, []);
   const markAllRead = useCallback(() => setNotifications(prev => prev.map(n => ({ ...n, read: true }))), []);
   const studentClasses = useMemo(() => classes.filter(c => joined.includes(c.id)), [classes, joined]);
-  const value = useMemo(() => ({ teacherClasses: classes, studentClasses, createClass, joinClass, deleteClass, leaveClass, noticesOf, addNotice, updateNotice, removeNotice, requestsOf, addRequest, setRequestStatus, membersOf, attendanceOf, markAttendance, cancelRequest, availabilityOf, addAvailability, removeAvailability, notifications, markAllRead }), [classes, studentClasses, createClass, joinClass, deleteClass, leaveClass, noticesOf, addNotice, updateNotice, removeNotice, requestsOf, addRequest, setRequestStatus, membersOf, attendanceOf, markAttendance, cancelRequest, availabilityOf, addAvailability, removeAvailability, notifications, markAllRead]);
+  const value = useMemo(() => ({ teacherClasses: classes, studentClasses, createClass, joinClass, deleteClass, leaveClass, noticesOf, addNotice, updateNotice, removeNotice, schedulesOf, addSchedule, requestsOf, addRequest, setRequestStatus, membersOf, attendanceOf, markAttendance, cancelRequest, availabilityOf, addAvailability, removeAvailability, notifications, markAllRead }), [classes, studentClasses, createClass, joinClass, deleteClass, leaveClass, noticesOf, addNotice, updateNotice, removeNotice, schedulesOf, addSchedule, requestsOf, addRequest, setRequestStatus, membersOf, attendanceOf, markAttendance, cancelRequest, availabilityOf, addAvailability, removeAvailability, notifications, markAllRead]);
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }
 export function useClasses() {

@@ -2,13 +2,13 @@ import { Image } from 'expo-image';
 import { useEffect, useMemo, useState } from 'react';
 import { Alert, Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSession, type Session } from '../auth/Session';
-import { parseServerDate, scheduleApi, type Schedule } from '../services/schedule';
+import { parseServerDate, scheduleApi, type Schedule, type ScheduleInput } from '../services/schedule';
 import { DateTimeField } from './DateTimeField';
 import { TimeRangeField } from './TimeRangeField';
 
 const weekdays = ['일', '월', '화', '수', '목', '금', '토'];
 export type StudentOption = { id: number; name: string };
-export function ScheduleManagement({ classId, registration, onRegisterChange, students: availableStudents = [] }: { classId?: number; registration: boolean; onRegisterChange: (active: boolean) => void; students?: StudentOption[] }) {
+export function ScheduleManagement({ classId, registration, onRegisterChange, students: availableStudents = [], localSchedules, onCreateLocal }: { classId?: number; registration: boolean; onRegisterChange: (active: boolean) => void; students?: StudentOption[]; localSchedules?: Schedule[]; onCreateLocal?: (input: ScheduleInput) => void }) {
   const { session } = useSession();
   const [result, setResult] = useState<{ session: Session; classId: number; revision: number; schedules?: Schedule[]; error?: string } | null>(null);
   const [choosingStudent, setChoosingStudent] = useState(false);
@@ -27,22 +27,24 @@ export function ScheduleManagement({ classId, registration, onRegisterChange, st
     }).catch(e => { if (active) setResult({ session, classId, revision, error: e instanceof Error ? e.message : '일정을 불러오지 못했어요.' }); });
     return () => { active = false; };
   }, [classId, session, revision]);
-  const rows = useMemo(() => (current?.schedules ?? []).map(item => ({ ...item, start: parseServerDate(item.startTime) })).filter(item => item.start.isValid()).sort((a, b) => a.start.valueOf() - b.start.valueOf()), [current?.schedules]);
-  const invalidCount = (current?.schedules?.length ?? 0) - rows.length;
+  const rows = useMemo(() => ((session ? current?.schedules : localSchedules) ?? []).map(item => ({ ...item, start: parseServerDate(item.startTime) })).filter(item => item.start.isValid()).sort((a, b) => a.start.valueOf() - b.start.valueOf()), [session, current?.schedules, localSchedules]);
+  const invalidCount = ((session ? current?.schedules : localSchedules)?.length ?? 0) - rows.length;
   const days = useMemo(() => { const found = [...new Set(rows.map(item => item.start.day()))].sort((a, b) => a - b); return found.length ? found : [1, 3, 5]; }, [rows]);
   const students = useMemo(() => [...new Set(rows.map(item => item.studentId))].sort((a, b) => a - b), [rows]);
   function openRegistration() { onRegisterChange(true); }
   function selectStudent() {
-    if (!availableStudents.length) return Alert.alert('준비 중', '학생 목록 기능은 준비 중이에요.');
+    if (!availableStudents.length) return Alert.alert('학생이 없어요', '수업에 참여한 학생이 아직 없어요.');
     setChoosingStudent(true);
   }
   async function createSchedule() {
-    if (!session || !classId) return Alert.alert('로그인과 수업 정보가 필요해요.');
-    if (session.user.role !== 'TEACHER') return Alert.alert('선생님만 일정을 등록할 수 있어요.');
+    if (!classId || (!session && !onCreateLocal)) return Alert.alert('로그인과 수업 정보가 필요해요.');
+    if (session && session.user.role !== 'TEACHER') return Alert.alert('선생님만 일정을 등록할 수 있어요.');
     if (!studentId) return Alert.alert('학생을 선택해주세요.');
     const startDate = parseServerDate(`${date} ${start}:00`);
     const endDate = parseServerDate(`${date} ${end}:00`);
     if (!startDate.isValid() || !endDate.isValid() || !endDate.isAfter(startDate)) return Alert.alert('날짜와 시간을 확인해주세요.');
+    if (!session && onCreateLocal) { onCreateLocal({ studentId, startTime: startDate.format('YYYY-MM-DD HH:mm:ss'), endTime: endDate.format('YYYY-MM-DD HH:mm:ss') }); onRegisterChange(false); return; }
+    if (!session) return;
     setBusy(true);
     try {
       await scheduleApi.create(classId, { studentId, startTime: startDate.format('YYYY-MM-DD HH:mm:ss'), endTime: endDate.format('YYYY-MM-DD HH:mm:ss') }, session.accessToken);
@@ -50,7 +52,8 @@ export function ScheduleManagement({ classId, registration, onRegisterChange, st
     } catch (e) { Alert.alert('일정 등록 실패', e instanceof Error ? e.message : '다시 시도해주세요.'); }
     finally { setBusy(false); }
   }
-  const status = !session ? '로그인이 필요해요.' : !classId ? '수업 정보가 필요해요.' : !current ? '일정을 불러오는 중이에요.' : current.error || '등록된 일정이 없어요.';
+  const nameOf = (id: number) => availableStudents.find(student => student.id === id)?.name ?? `학생 #${id}`;
+  const status = !session && localSchedules ? '등록된 일정이 없어요.' : !session ? '로그인이 필요해요.' : !classId ? '수업 정보가 필요해요.' : !current ? '일정을 불러오는 중이에요.' : current.error || '등록된 일정이 없어요.';
   return <View style={styles.content}>{invalidCount > 0 && <Text style={styles.warning}>날짜 형식이 올바르지 않은 일정 {invalidCount}개를 표시하지 못했어요.</Text>}{registration ? <>
     <Text style={styles.label}>학생</Text><Pressable style={styles.input} onPress={selectStudent}><Image source={require('../../assets/figma/schedule-input.svg')} style={StyleSheet.absoluteFill} contentFit="fill" /><Text style={styles.placeholder}>{availableStudents.find(student => student.id === studentId)?.name ?? '학생 선택'}</Text></Pressable>
     <Modal transparent visible={choosingStudent} animationType="fade" onRequestClose={() => setChoosingStudent(false)}><View style={styles.overlay}><View style={styles.choices}>{availableStudents.map(student => <Pressable key={student.id} onPress={() => { setStudentId(student.id); setChoosingStudent(false); }} style={styles.choice}><Text style={styles.choiceText}>{student.name}</Text></Pressable>)}<Pressable onPress={() => setChoosingStudent(false)} style={styles.choice}><Text style={styles.choiceText}>취소</Text></Pressable></View></View></Modal>
@@ -58,10 +61,10 @@ export function ScheduleManagement({ classId, registration, onRegisterChange, st
     <Text style={styles.label}>수업 시간</Text><TimeRangeField start={start} end={end} onChange={(nextStart, nextEnd) => { setStart(nextStart); setEnd(nextEnd); }} />
     <Pressable disabled={busy} style={styles.register} onPress={createSchedule}><Image source={require('../../assets/figma/apply-button.svg')} style={StyleSheet.absoluteFill} contentFit="fill" /><Text style={styles.buttonText}>등록</Text></Pressable>
     <View style={styles.registrationHeader}><Image source={require('../../assets/figma/schedule-header.svg')} style={StyleSheet.absoluteFill} contentFit="fill" /><Text style={styles.headerCell}>학생</Text><Text style={styles.headerCell}>날짜/시간</Text></View>
-    {rows.length ? rows.map(item => <View key={item.scheduleId} style={styles.registrationRow}><Image source={require('../../assets/figma/schedule-row.svg')} style={StyleSheet.absoluteFill} contentFit="fill" /><Text style={styles.cell}>학생 #{item.studentId}</Text><Text style={styles.cell}>{item.start.format('YYYY.MM.DD HH:mm')}</Text></View>) : <Text style={styles.empty}>{status}</Text>}
+    {rows.length ? rows.map(item => <View key={item.scheduleId} style={styles.registrationRow}><Image source={require('../../assets/figma/schedule-row.svg')} style={StyleSheet.absoluteFill} contentFit="fill" /><Text style={styles.cell}>{nameOf(item.studentId)}</Text><Text style={styles.cell}>{item.start.format('YYYY.MM.DD HH:mm')}</Text></View>) : <Text style={styles.empty}>{status}</Text>}
   </> : <>
     <Text style={styles.title}>요일별 시간표</Text><ScrollView horizontal><View style={{ minWidth: 362, width: Math.max(362, (days.length + 1) * 100) }}><View style={styles.tableHeader}><Image source={require('../../assets/figma/schedule-header.svg')} style={StyleSheet.absoluteFill} contentFit="fill" /><Text style={styles.headerCell}>학생</Text>{days.map(value => <Text key={value} style={styles.headerCell}>{weekdays[value]}</Text>)}</View>
-    {students.length ? students.map(student => <View key={student} style={styles.tableRow}><Image source={require('../../assets/figma/schedule-row.svg')} style={StyleSheet.absoluteFill} contentFit="fill" /><Text style={styles.cell}>학생 #{student}</Text>{days.map(value => <Text key={value} style={styles.cell}>{rows.filter(item => item.studentId === student && item.start.day() === value).map(item => item.start.format('MM/DD HH:mm')).join('\n') || '—'}</Text>)}</View>) : <Text style={styles.empty}>{status}</Text>}</View></ScrollView>
+    {students.length ? students.map(student => <View key={student} style={styles.tableRow}><Image source={require('../../assets/figma/schedule-row.svg')} style={StyleSheet.absoluteFill} contentFit="fill" /><Text style={styles.cell}>{nameOf(student)}</Text>{days.map(value => <Text key={value} style={styles.cell}>{rows.filter(item => item.studentId === student && item.start.day() === value).map(item => item.start.format('MM/DD HH:mm')).join('\n') || '—'}</Text>)}</View>) : <Text style={styles.empty}>{status}</Text>}</View></ScrollView>
     <Pressable style={styles.open} onPress={openRegistration}><Text style={styles.buttonText}>+ 학생 시간표 등록</Text></Pressable>
   </>}</View>;
 }

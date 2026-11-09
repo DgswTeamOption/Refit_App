@@ -5,7 +5,7 @@ import { router } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { Alert, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useSession, type Session } from '../auth/Session';
+import { useInitial, useSession, type Session } from '../auth/Session';
 import { emailApi } from '../services/email';
 import { baseUrl } from '../services/http';
 import { userApi, type UserProfile } from '../services/user';
@@ -17,12 +17,14 @@ export function ProfileScreen(props: ProfileProps) {
   return <ProfileBody key={session ? `user-${session.user.id}` : 'guest'} {...props} />;
 }
 function ProfileBody({ page, notifications, notificationActions }: ProfileProps) {
-  const { session, setSession } = useSession();
+  const { session, setSession, localUser, setLocalUser } = useSession();
+  const local = !session ? localUser : null;
+  const initial = useInitial();
   const [result, setResult] = useState<{ session: Session; profile?: UserProfile; error?: string } | null>(null);
   const current = result?.session === session ? result : null;
   const profile = current?.profile ?? null;
   const error = current?.error ?? '';
-  const [name, setName] = useState('');
+  const [name, setName] = useState(() => local?.name ?? '');
   const [code, setCode] = useState('');
   const [confirmation, setConfirmation] = useState('');
   const [busy, setBusy] = useState(false);
@@ -37,9 +39,10 @@ function ProfileBody({ page, notifications, notificationActions }: ProfileProps)
     return () => { active = false; };
   }, [session]);
   async function save() {
-    if (!session || !profile) return Alert.alert('프로필 정보를 먼저 불러와야 해요.');
     const nextName = name.trim();
     if (!nextName || nextName.length > 50) return Alert.alert('이름은 1~50자로 입력해주세요.');
+    if (local) { setLocalUser({ ...local, name: nextName }); return router.replace('/profile'); }
+    if (!session || !profile) return Alert.alert('프로필 정보를 먼저 불러와야 해요.');
     setBusy(true);
     try { await userApi.updateName(nextName, session.accessToken); router.replace('/profile'); }
     catch (e) { Alert.alert('정보 수정 실패', e instanceof Error ? e.message : '다시 시도해주세요.'); }
@@ -61,6 +64,7 @@ function ProfileBody({ page, notifications, notificationActions }: ProfileProps)
     finally { setBusy(false); }
   }
   async function beginRemoval() {
+    if (local) { router.push('/profile-delete'); return; }
     if (!session || !profile) { router.push('/profile-delete'); return; }
     setBusy(true);
     try {
@@ -72,6 +76,10 @@ function ProfileBody({ page, notifications, notificationActions }: ProfileProps)
     finally { setBusy(false); }
   }
   async function removeAccount() {
+    if (local) {
+      if (confirmation !== '계정 삭제') return Alert.alert('확인 문구를 입력해주세요.');
+      setLocalUser(null); router.replace('/'); return;
+    }
     if (!session || !profile) return Alert.alert('로그인이 필요해요.');
     if (!/^\d{6}$/.test(code) || confirmation !== '계정 삭제') return Alert.alert('인증코드와 확인 문구를 입력해주세요.');
     setBusy(true);
@@ -87,20 +95,20 @@ function ProfileBody({ page, notifications, notificationActions }: ProfileProps)
   const imageUri = photo && (photo.startsWith('/') ? `${baseUrl}${photo}` : photo);
   const heading = page === 'view' ? '내 정보' : page === 'edit' ? '정보 수정' : '정말 탈퇴하시겠어요?';
   return <SafeAreaView edges={['top', 'bottom']} style={styles.safe}>
-    <View style={styles.header}><Pressable onPress={() => router.replace('/home')}><Image source={require('../../assets/figma/logo.svg')} style={styles.logo} contentFit="contain" accessibilityLabel="홈" /></Pressable><View style={styles.headerRight}><NotificationBell items={notifications} actions={notificationActions} /><View style={styles.avatar}><Image source={require('../../assets/figma/avatar.svg')} style={StyleSheet.absoluteFill} contentFit="contain" /><Text style={styles.avatarText}>학</Text></View></View></View>
+    <View style={styles.header}><Pressable onPress={() => router.replace('/home')}><Image source={require('../../assets/figma/logo.svg')} style={styles.logo} contentFit="contain" accessibilityLabel="홈" /></Pressable><View style={styles.headerRight}><NotificationBell items={notifications} actions={notificationActions} /><View style={styles.avatar}><Image source={require('../../assets/figma/avatar.svg')} style={StyleSheet.absoluteFill} contentFit="contain" /><Text style={styles.avatarText}>{initial}</Text></View></View></View>
     <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
       <Text style={styles.heading}>{heading}</Text><Image source={require('../../assets/figma/policy-divider.svg')} style={styles.divider} contentFit="fill" />
-      {!session && <Text style={styles.notice}>로그인 기능이 준비되면 내 정보를 확인할 수 있어요.</Text>}
+      {!session && !local && <Text style={styles.notice}>로그인 후 내 정보를 확인할 수 있어요.</Text>}
       {!!error && <Text style={styles.notice}>{error}</Text>}
       {page === 'view' ? <>
         <Pressable accessibilityRole="button" disabled={busy} onPress={changePhoto} style={styles.photoArea}><View style={styles.photoLarge}><Image source={imageUri ? { uri: imageUri } : require('../../assets/figma/profile-photo.svg')} style={StyleSheet.absoluteFill} contentFit="cover" />{!imageUri && <Text style={styles.photoPlaceholder}>사진</Text>}</View><Text style={styles.photoLink}>프로필 사진 변경</Text></Pressable>
-        <View style={styles.info}><Text style={styles.infoLabel}>이름</Text><Text style={styles.infoValue}>{profile?.name ?? '—'}</Text><Image source={require('../../assets/figma/policy-divider.svg')} style={styles.infoDivider} contentFit="fill" /></View>
-        <View style={styles.info}><Text style={styles.infoLabel}>이메일</Text><Text style={[styles.infoValue, styles.email]}>{profile?.emailId ?? '—'}</Text><Image source={require('../../assets/figma/policy-divider.svg')} style={styles.infoDivider} contentFit="fill" /></View>
+        <View style={styles.info}><Text style={styles.infoLabel}>이름</Text><Text style={styles.infoValue}>{profile?.name ?? local?.name ?? '—'}</Text><Image source={require('../../assets/figma/policy-divider.svg')} style={styles.infoDivider} contentFit="fill" /></View>
+        <View style={styles.info}><Text style={styles.infoLabel}>이메일</Text><Text style={[styles.infoValue, styles.email]}>{profile?.emailId ?? local?.email ?? '—'}</Text><Image source={require('../../assets/figma/policy-divider.svg')} style={styles.infoDivider} contentFit="fill" /></View>
         <Pressable style={styles.neutralButton} onPress={() => router.push('/profile-edit')}><Text style={styles.neutralText}>정보 수정</Text></Pressable><Pressable disabled={busy} onPress={beginRemoval}><Text style={styles.deleteLink}>계정 삭제</Text></Pressable>
       </> : page === 'edit' ? <>
         <Text style={styles.label}>프로필 사진</Text><Pressable onPress={changePhoto} disabled={busy} style={styles.editPhoto}><Image source={imageUri ? { uri: imageUri } : require('../../assets/figma/edit-photo.svg')} style={StyleSheet.absoluteFill} contentFit="cover" />{!imageUri && <Text style={styles.editPhotoText}>사진 변경</Text>}</Pressable>
-        <Text style={styles.label}>이름</Text><TextInput accessibilityLabel="이름" value={profile ? name : ''} onChangeText={setName} maxLength={50} placeholder="이름" placeholderTextColor="#999" style={styles.input} />
-        <Text style={styles.label}>이메일</Text><TextInput accessibilityLabel="이메일" value={profile?.emailId ?? ''} editable={false} placeholder="이메일" placeholderTextColor="#999" style={styles.input} />
+        <Text style={styles.label}>이름</Text><TextInput accessibilityLabel="이름" value={profile || local ? name : ''} onChangeText={setName} maxLength={50} placeholder="이름" placeholderTextColor="#999" style={styles.input} />
+        <Text style={styles.label}>이메일</Text><TextInput accessibilityLabel="이메일" value={profile?.emailId ?? local?.email ?? ''} editable={false} placeholder="이메일" placeholderTextColor="#999" style={styles.input} />
         <Pressable disabled={busy} onPress={save} style={styles.primaryButton}><Text style={styles.buttonText}>저장</Text></Pressable><Pressable onPress={() => router.back()}><Text style={styles.cancel}>취소</Text></Pressable>
       </> : <>
         <Text style={styles.deleteTitle}>정말 탈퇴하시겠어요?</Text><Text style={styles.deleteDescription}>탈퇴하면 계정과 프로필 정보가 삭제됩니다.</Text>

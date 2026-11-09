@@ -14,7 +14,7 @@ function Button({ label, variant = 'primary', onPress, disabled = false }: { lab
 }
 
 export function AuthScreen({ mode }: { mode: Mode }) {
-  const { signupDraft, setSignupDraft } = useSession();
+  const { signupDraft, setSignupDraft, setLocalUser } = useSession();
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [code, setCode] = useState('');
@@ -46,8 +46,10 @@ export function AuthScreen({ mode }: { mode: Mode }) {
   async function submit() {
     if (mode === 'role') {
       if (!signupDraft) return Alert.alert('회원가입 정보를 먼저 입력해주세요.');
-      setSignupDraft({ ...signupDraft, role: role === 'teacher' ? 'TEACHER' : 'STUDENT' });
-      return Alert.alert('준비 중', '회원가입 기능이 준비되면 시작할 수 있어요.');
+      const chosen = role === 'teacher' ? 'TEACHER' as const : 'STUDENT' as const;
+      setSignupDraft({ ...signupDraft, role: chosen });
+      setLocalUser({ name: signupDraft.name, email: signupDraft.email, role: chosen });
+      return router.replace({ pathname: '/home', params: { role } });
     }
     if (mode === 'signup' && !name.trim()) return Alert.alert('이름을 입력해주세요.');
     if (!sent || remaining === 0 || !/^\d{6}$/.test(code)) return Alert.alert('유효한 인증코드 6자리를 입력해주세요.');
@@ -59,7 +61,12 @@ export function AuthScreen({ mode }: { mode: Mode }) {
         setSignupDraft({ name: name.trim(), email: sentEmail, role: 'STUDENT' });
         router.push('/role');
       }
-      else Alert.alert('인증 완료', '로그인 기능이 준비되면 이용할 수 있어요.');
+      else {
+        const known = signupDraft && signupDraft.email === sentEmail ? signupDraft : null;
+        const user = known ?? { name: sentEmail.split('@')[0], email: sentEmail, role: 'STUDENT' as const };
+        setLocalUser(user);
+        router.replace({ pathname: '/home', params: { role: user.role === 'TEACHER' ? 'teacher' : 'student' } });
+      }
     } catch (error) { Alert.alert('인증 실패', error instanceof Error ? error.message : '다시 시도해주세요.'); }
     finally { setBusy(false); }
   }
