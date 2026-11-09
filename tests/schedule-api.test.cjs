@@ -17,6 +17,8 @@ delete process.env.EXPO_PUBLIC_API_URL;
 const http = loadTypeScript('src/services/http.ts', { 'react-native': { Platform: { OS: 'ios' } } });
 if (originalApiUrl !== undefined) process.env.EXPO_PUBLIC_API_URL = originalApiUrl;
 const { scheduleApi, parseServerDate, scheduleDates } = loadTypeScript('src/services/schedule.ts', { './http': http });
+const { emailApi } = loadTypeScript('src/services/email.ts', { './http': http });
+const { userApi } = loadTypeScript('src/services/user.ts', { './http': http, 'react-native': { Platform: { OS: 'ios' } } });
 
 test('server dates are parsed strictly without assuming a timezone', () => {
   assert.equal(parseServerDate('2026-08-27 16:00:00').format('YYYY-MM-DD HH:mm:ss'), '2026-08-27 16:00:00');
@@ -50,6 +52,26 @@ test('schedule requests use bearer authentication and server field names', async
     await scheduleApi.remove(7, 42, 'test-token');
     assert.equal(calls[3].url, 'http://localhost:8080/api/class/schedule/7/42');
     assert.equal(calls[3].options.method, 'DELETE');
+  } finally { global.fetch = originalFetch; }
+});
+
+test('email verification and profile changes use the documented server fields', async () => {
+  const originalFetch = global.fetch;
+  const calls = [];
+  global.fetch = async (url, options) => {
+    calls.push({ url, options });
+    return new Response(JSON.stringify({ success: true, data: { is_verification: true } }), { status: 200 });
+  };
+  try {
+    await emailApi.sendCode('student@example.com');
+    await emailApi.verifyCode('student@example.com', '123456');
+    await userApi.updateName('새 이름', 'profile-token');
+    assert.deepEqual(JSON.parse(calls[0].options.body), { email_id: 'student@example.com' });
+    assert.deepEqual(JSON.parse(calls[1].options.body), { email_id: 'student@example.com', verification_code: '123456' });
+    assert.equal(calls[2].url, 'http://localhost:8080/api/setting/username');
+    assert.equal(calls[2].options.method, 'PATCH');
+    assert.equal(calls[2].options.headers.get('Authorization'), 'Bearer profile-token');
+    assert.deepEqual(JSON.parse(calls[2].options.body), { name: '새 이름' });
   } finally { global.fetch = originalFetch; }
 });
 

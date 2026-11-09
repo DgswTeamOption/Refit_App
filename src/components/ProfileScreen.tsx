@@ -44,7 +44,11 @@ function ProfileBody({ page, notifications, notificationActions }: ProfileProps)
     if (local) { setLocalUser({ ...local, name: nextName }); return router.replace('/profile'); }
     if (!session || !profile) return Alert.alert('프로필 정보를 먼저 불러와야 해요.');
     setBusy(true);
-    try { await userApi.updateName(nextName, session.accessToken); router.replace('/profile'); }
+    try {
+      await userApi.updateName(nextName, session.accessToken);
+      setSession(current => current?.accessToken === session.accessToken ? { ...current, user: { ...current.user, name: nextName } } : current);
+      router.replace('/profile');
+    }
     catch (e) { Alert.alert('정보 수정 실패', e instanceof Error ? e.message : '다시 시도해주세요.'); }
     finally { setBusy(false); }
   }

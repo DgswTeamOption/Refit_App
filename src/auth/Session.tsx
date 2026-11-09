@@ -1,9 +1,9 @@
-import { createContext, useContext, useMemo, useState, type ReactNode } from 'react';
+import { createContext, useContext, useMemo, useState, type Dispatch, type ReactNode, type SetStateAction } from 'react';
 
 export type Session = { accessToken: string; refreshToken: string; user: { id: number; name: string; role: 'STUDENT' | 'TEACHER' } };
 export type SignupDraft = { name: string; email: string; role: 'STUDENT' | 'TEACHER' };
 export type LocalUser = { name: string; email: string; role: 'STUDENT' | 'TEACHER' };
-type SessionContextValue = { localUser: LocalUser | null; setLocalUser: (user: LocalUser | null) => void; session: Session | null; setSession: (session: Session | null) => void; signupDraft: SignupDraft | null; setSignupDraft: (draft: SignupDraft | null) => void };
+type SessionContextValue = { localUser: LocalUser | null; setLocalUser: (user: LocalUser | null) => void; session: Session | null; setSession: Dispatch<SetStateAction<Session | null>>; signupDraft: SignupDraft | null; setSignupDraft: (draft: SignupDraft | null) => void };
 const SessionContext = createContext<SessionContextValue | null>(null);
 
 // The future login/signup response can be passed to setSession once those APIs exist.
