@@ -1,5 +1,5 @@
 import { Image } from 'expo-image';
-import { NotificationBell } from './NotificationBell';
+import { NotificationBell, type NotificationActions, type NotificationItem } from './NotificationBell';
 import * as ImagePicker from 'expo-image-picker';
 import { router } from 'expo-router';
 import { useEffect, useState } from 'react';
@@ -11,7 +11,7 @@ import { baseUrl } from '../services/http';
 import { userApi, type UserProfile } from '../services/user';
 
 type Page = 'view' | 'edit' | 'delete';
-export function ProfileScreen({ page }: { page: Page }) {
+export function ProfileScreen({ page, notifications, notificationActions }: { page: Page; notifications?: NotificationItem[]; notificationActions?: NotificationActions }) {
   const { session, setSession } = useSession();
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [name, setName] = useState('');
@@ -80,7 +80,7 @@ export function ProfileScreen({ page }: { page: Page }) {
   const imageUri = photo && (photo.startsWith('/') ? `${baseUrl}${photo}` : photo);
   const heading = page === 'view' ? '내 정보' : page === 'edit' ? '정보 수정' : '정말 탈퇴하시겠어요?';
   return <SafeAreaView edges={['top', 'bottom']} style={styles.safe}>
-    <View style={styles.header}><Pressable onPress={() => router.replace('/home')}><Image source={require('../../assets/figma/logo.svg')} style={styles.logo} contentFit="contain" accessibilityLabel="홈" /></Pressable><View style={styles.headerRight}><NotificationBell /><View style={styles.avatar}><Image source={require('../../assets/figma/avatar.svg')} style={StyleSheet.absoluteFill} contentFit="contain" /><Text style={styles.avatarText}>학</Text></View></View></View>
+    <View style={styles.header}><Pressable onPress={() => router.replace('/home')}><Image source={require('../../assets/figma/logo.svg')} style={styles.logo} contentFit="contain" accessibilityLabel="홈" /></Pressable><View style={styles.headerRight}><NotificationBell items={notifications} actions={notificationActions} /><View style={styles.avatar}><Image source={require('../../assets/figma/avatar.svg')} style={StyleSheet.absoluteFill} contentFit="contain" /><Text style={styles.avatarText}>학</Text></View></View></View>
     <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
       <Text style={styles.heading}>{heading}</Text><Image source={require('../../assets/figma/policy-divider.svg')} style={styles.divider} contentFit="fill" />
       {!session && <Text style={styles.notice}>로그인 기능이 준비되면 내 정보를 확인할 수 있어요.</Text>}

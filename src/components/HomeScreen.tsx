@@ -3,14 +3,14 @@ import * as ImagePicker from 'expo-image-picker';
 import { useState } from 'react';
 import { router } from 'expo-router';
 import { Calendar } from './Calendar';
-import { NotificationBell } from './NotificationBell';
+import { NotificationBell, type NotificationActions, type NotificationItem } from './NotificationBell';
 import { ClassCards, type ClassSummary } from './ClassCards';
 import { Alert, Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 type Role = 'student' | 'teacher';
 
-export function HomeScreen({ role, classes = [] }: { role: Role; classes?: ClassSummary[] }) {
+export function HomeScreen({ role, classes = [], notifications, notificationActions }: { role: Role; classes?: ClassSummary[]; notifications?: NotificationItem[]; notificationActions?: NotificationActions }) {
   const [modalVisible, setModalVisible] = useState(false);
   const [value, setValue] = useState('');
   const [banner, setBanner] = useState<ImagePicker.ImagePickerAsset | null>(null);
@@ -26,7 +26,7 @@ export function HomeScreen({ role, classes = [] }: { role: Role; classes?: Class
   return <SafeAreaView edges={['top', 'bottom']} style={styles.safe}>
     <View style={styles.header}>
       <Image source={require('../../assets/figma/logo.svg')} style={styles.logo} contentFit="contain" accessibilityLabel="Refit" />
-      <View style={styles.actions}><NotificationBell /><Pressable accessibilityRole="button" accessibilityLabel="프로필" onPress={() => router.push('/profile')} style={styles.avatar}><Image source={require('../../assets/figma/avatar.svg')} style={StyleSheet.absoluteFill} contentFit="contain" /><Text style={styles.avatarText}>학</Text></Pressable></View>
+      <View style={styles.actions}><NotificationBell items={notifications} actions={notificationActions} /><Pressable accessibilityRole="button" accessibilityLabel="프로필" onPress={() => router.push('/profile')} style={styles.avatar}><Image source={require('../../assets/figma/avatar.svg')} style={StyleSheet.absoluteFill} contentFit="contain" /><Text style={styles.avatarText}>학</Text></Pressable></View>
     </View>
     <ScrollView contentContainerStyle={styles.content}>
       <Calendar />
