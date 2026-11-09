@@ -14,5 +14,5 @@ export default function Home() {
     else store.joinClass(value, session?.user.name ?? localUser?.name);
   }
   const list = (teacher ? store.teacherClasses : store.studentClasses).map(item => ({ ...item, calendarDates: scheduleDates(store.schedulesOf(item.id)) }));
-  return <HomeScreen role={teacher ? 'teacher' : 'student'} classes={list} onSubmitClass={submit} onRemoveClass={teacher ? store.deleteClass : store.leaveClass} notifications={store.notifications} notificationActions={{ markAllRead: async () => store.markAllRead() }} />;
+  return <HomeScreen role={teacher ? 'teacher' : 'student'} classes={list} onSubmitClass={submit} onRemoveClass={teacher ? store.deleteClass : (id: number) => store.leaveClass(id, session?.user.name ?? localUser?.name)} notifications={store.notifications} notificationActions={{ markAllRead: async () => store.markAllRead() }} />;
 }
