@@ -1,24 +1,17 @@
 import { Image } from 'expo-image';
 import { useState } from 'react';
 import { router } from 'expo-router';
+import { Calendar } from './Calendar';
 import { Alert, Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 type Role = 'student' | 'teacher';
-const weekdays = ['일', '월', '화', '수', '목', '금', '토'];
 
 export function HomeScreen({ role }: { role: Role }) {
-  const [month, setMonth] = useState(() => { const today = new Date(); return new Date(today.getFullYear(), today.getMonth(), 1); });
   const [modalVisible, setModalVisible] = useState(false);
   const [value, setValue] = useState('');
-  const year = month.getFullYear();
-  const monthIndex = month.getMonth();
-  const start = new Date(year, monthIndex, 1).getDay();
-  const days = new Date(year, monthIndex + 1, 0).getDate();
-  const cells = Array.from({ length: 42 }, (_, index) => index - start + 1);
   const teacher = role === 'teacher';
   const action = teacher ? '수업 만들기' : '수업 참여하기';
-  function changeMonth(delta: number) { setMonth(new Date(year, monthIndex + delta, 1)); }
   function showModal() { setValue(''); setModalVisible(true); }
   return <SafeAreaView edges={['top', 'bottom']} style={styles.safe}>
     <View style={styles.header}>
@@ -26,12 +19,7 @@ export function HomeScreen({ role }: { role: Role }) {
       <View style={styles.actions}><Pressable accessibilityRole="button" accessibilityLabel="알림" onPress={() => Alert.alert('준비 중', '알림 기능은 준비 중이에요.')}><Image source={require('../../assets/figma/bell.svg')} style={styles.bell} contentFit="contain" /></Pressable><Pressable accessibilityRole="button" accessibilityLabel="프로필" onPress={() => router.push('/profile')} style={styles.avatar}><Image source={require('../../assets/figma/avatar.svg')} style={StyleSheet.absoluteFill} contentFit="contain" /><Text style={styles.avatarText}>학</Text></Pressable></View>
     </View>
     <ScrollView contentContainerStyle={styles.content}>
-      <View style={styles.calendar}>
-        <Image source={require('../../assets/figma/calendar.svg')} style={StyleSheet.absoluteFill} contentFit="fill" />
-        <View style={styles.calendarHeader}><Text style={styles.month}>{year}년 {monthIndex + 1}월</Text><View style={styles.arrows}><Pressable accessibilityRole="button" accessibilityLabel="이전 달" onPress={() => changeMonth(-1)}><Text style={styles.arrow}>‹</Text></Pressable><Pressable accessibilityRole="button" accessibilityLabel="다음 달" onPress={() => changeMonth(1)}><Text style={styles.arrow}>›</Text></Pressable></View></View>
-        <View style={styles.week}>{weekdays.map(day => <Text key={day} style={styles.weekday}>{day}</Text>)}</View>
-        <View style={styles.days}>{cells.map((day, index) => <View style={styles.day} key={index}><Text style={[styles.dayText, (index % 7 === 0 || index % 7 === 6) && styles.weekend]}>{day > 0 && day <= days ? day : ''}</Text></View>)}</View>
-      </View>
+      <Calendar />
       <View style={styles.sectionHeader}><Text style={styles.sectionTitle}>내 수업</Text><Pressable accessibilityRole="button" onPress={showModal}><Text style={styles.add}>+ {action}</Text></Pressable></View>
       <View style={styles.empty}><Text style={styles.emptyText}>아직 참여한 수업이 없어요</Text><Pressable accessibilityRole="button" onPress={showModal} style={styles.emptyButton}><Image source={require('../../assets/figma/home-button.svg')} style={StyleSheet.absoluteFill} contentFit="fill" /><Text style={styles.buttonText}>{action}</Text></Pressable></View>
     </ScrollView>
