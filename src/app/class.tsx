@@ -87,7 +87,7 @@ export default function ClassPage() {
     localSchedules={id === undefined ? undefined : store.schedulesOf(id)}
     onCreateLocalSchedule={id === undefined ? undefined : input => addSchedule(id, input)}
     attendanceRows={attendance.filter(a => a.student === author).map(a => ({ id: `${a.student}-${a.date}`, cells: [a.date, { label: a.status === 'present' ? '출석' : '결석', tone: a.status === 'present' ? 'blue' as const : 'red' as const }] }))}
-    attendanceSummary={`이번달 출석 ${attendance.filter(a => a.status === 'present' && a.date.slice(0, 7) === today.slice(0, 7)).length}건 · 결석 ${attendance.filter(a => a.status === 'absent' && a.date.slice(0, 7) === today.slice(0, 7)).length}건`}
+    attendanceSummary={{ present: attendance.filter(a => a.status === 'present' && a.date.slice(0, 7) === today.slice(0, 7)).length, absent: attendance.filter(a => a.status === 'absent' && a.date.slice(0, 7) === today.slice(0, 7)).length }}
     onSaveAvailability={id === undefined ? undefined : async input => addAvailability(id, input)}
     notifications={store.notifications} notificationActions={{ markAllRead: async () => markAllRead() }}
     calendarMarks={calendarMarks}
