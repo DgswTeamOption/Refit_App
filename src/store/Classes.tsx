@@ -19,7 +19,7 @@ type Value = {
   createClass: (name: string, bannerUrl?: string | null) => StoredClass;
   joinClass: (code: string, student?: string) => StoredClass;
   deleteClass: (id: number) => void;
-  leaveClass: (id: number) => void;
+  leaveClass: (id: number, student?: string) => void;
   noticesOf: (classId: number) => Notice[];
   addNotice: (classId: number, input: Input, author: string) => void;
   updateNotice: (classId: number, id: string, input: Input) => void;
@@ -75,9 +75,13 @@ export function ClassesProvider({ children }: { children: ReactNode }) {
   }, [classes, joined]);
   const deleteClass = useCallback((id: number) => {
     setClasses(prev => prev.filter(c => c.id !== id)); setJoined(prev => prev.filter(x => x !== id));
-    setNotices(prev => { const { [id]: _removed, ...rest } = prev; return rest; });
+    const drop = <T,>(prev: Record<number, T>) => { const { [id]: _removed, ...rest } = prev; return rest; };
+    setNotices(drop); setRequests(drop); setAvailability(drop); setSchedules(drop); setMembers(drop); setAttendance(drop);
   }, []);
-  const leaveClass = useCallback((id: number) => setJoined(prev => prev.filter(x => x !== id)), []);
+  const leaveClass = useCallback((id: number, student = '학생') => {
+    setJoined(prev => prev.filter(x => x !== id));
+    setMembers(prev => ({ ...prev, [id]: (prev[id] ?? []).filter(name => name !== student) }));
+  }, []);
   const noticesOf = useCallback((classId: number) => notices[classId] ?? [], [notices]);
   const addNotice = useCallback((classId: number, input: Input, author: string) => {
     const item: Notice = { id: `${classId}-${Date.now()}`, title: input.title, body: input.body, author, dateLabel: dateLabel() };
