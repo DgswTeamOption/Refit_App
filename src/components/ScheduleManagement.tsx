@@ -33,7 +33,7 @@ export function ScheduleManagement({ classId, registration, onRegisterChange, st
   const invalidCount = (schedules?.length ?? 0) - rows.length;
   const days = useMemo(() => { const found = [...new Set(rows.map(item => item.start.day()))].sort((a, b) => a - b); return found.length ? found : [1, 3, 5]; }, [rows]);
   const students = useMemo(() => [...new Set(rows.map(item => item.studentId))].sort((a, b) => a - b), [rows]);
-  function openRegistration() { onRegisterChange(true); }
+  function openRegistration() { setStudentId(null); setDate(''); setStart(''); setEnd(''); onRegisterChange(true); }
   function selectStudent() {
     if (!availableStudents.length) return Alert.alert('학생이 없어요', '수업에 참여한 학생이 아직 없어요.');
     setChoosingStudent(true);
@@ -41,7 +41,7 @@ export function ScheduleManagement({ classId, registration, onRegisterChange, st
   async function createSchedule() {
     if (!classId || (localMode ? !onCreateLocal : !session)) return Alert.alert('로그인과 수업 정보가 필요해요.');
     if (session && session.user.role !== 'TEACHER') return Alert.alert('선생님만 일정을 등록할 수 있어요.');
-    if (!studentId) return Alert.alert('학생을 선택해주세요.');
+    if (!studentId || !availableStudents.some(student => student.id === studentId)) return Alert.alert('학생을 선택해주세요.');
     const startDate = parseServerDate(`${date} ${start}:00`);
     const endDate = parseServerDate(`${date} ${end}:00`);
     if (!startDate.isValid() || !endDate.isValid() || !endDate.isAfter(startDate)) return Alert.alert('날짜와 시간을 확인해주세요.');

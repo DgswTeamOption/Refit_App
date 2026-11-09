@@ -1,7 +1,7 @@
 import { useLocalSearchParams } from 'expo-router';
 import { Alert } from 'react-native';
 import { HomeScreen } from '../components/HomeScreen';
-import { scheduleDates } from '../services/schedule';
+import { scheduleDates, studentScheduleDates } from '../services/schedule';
 import { useSession } from '../auth/Session';
 import { useClasses } from '../store/Classes';
 export default function Home() {
@@ -13,6 +13,11 @@ export default function Home() {
     if (teacher) { const item = store.createClass(value, bannerUri); Alert.alert('수업이 만들어졌어요', `수업코드: ${item.code}`); }
     else store.joinClass(value, session?.user.name ?? localUser?.name);
   }
-  const list = (teacher ? store.teacherClasses : store.studentClasses).map(item => ({ ...item, calendarDates: scheduleDates(store.schedulesOf(item.id)) }));
+  const studentName = session?.user.name ?? localUser?.name;
+  const list = (teacher ? store.teacherClasses : store.studentClasses).map(item => {
+    const studentId = store.studentOptionsOf(item.id).find(student => student.name === studentName)?.id;
+    const schedules = store.schedulesOf(item.id);
+    return { ...item, calendarDates: teacher ? scheduleDates(schedules) : studentScheduleDates(schedules, studentId) };
+  });
   return <HomeScreen role={teacher ? 'teacher' : 'student'} classes={list} onSubmitClass={submit} onRemoveClass={teacher ? store.deleteClass : (id: number) => store.leaveClass(id, session?.user.name ?? localUser?.name)} notifications={store.notifications} notificationActions={{ markAllRead: async () => store.markAllRead() }} />;
 }

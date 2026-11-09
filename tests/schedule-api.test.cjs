@@ -16,7 +16,7 @@ const originalApiUrl = process.env.EXPO_PUBLIC_API_URL;
 delete process.env.EXPO_PUBLIC_API_URL;
 const http = loadTypeScript('src/services/http.ts', { 'react-native': { Platform: { OS: 'ios' } } });
 if (originalApiUrl !== undefined) process.env.EXPO_PUBLIC_API_URL = originalApiUrl;
-const { scheduleApi, parseServerDate, scheduleDates } = loadTypeScript('src/services/schedule.ts', { './http': http });
+const { scheduleApi, parseServerDate, scheduleDates, studentScheduleDates } = loadTypeScript('src/services/schedule.ts', { './http': http });
 const { emailApi } = loadTypeScript('src/services/email.ts', { './http': http });
 const { userApi } = loadTypeScript('src/services/user.ts', { './http': http, 'react-native': { Platform: { OS: 'ios' } } });
 
@@ -29,6 +29,15 @@ test('server dates are parsed strictly without assuming a timezone', () => {
 test('calendar dates are local, deduplicated and exclude malformed values', () => {
   const item = startTime => ({ scheduleId: 1, classId: 7, studentId: 3, startTime, endTime: startTime });
   assert.deepEqual(scheduleDates([item('2026-08-27 00:00:00'), item('2026-08-27 23:30:00'), item('invalid')]), ['2026-08-27']);
+});
+
+test('student calendar includes only the selected student’s schedules', () => {
+  const schedules = [
+    { studentId: 1, startTime: '2026-08-01 09:00:00' },
+    { studentId: 2, startTime: '2026-08-02 09:00:00' },
+  ];
+  assert.deepEqual(studentScheduleDates(schedules, 1), ['2026-08-01']);
+  assert.deepEqual(studentScheduleDates(schedules, undefined), []);
 });
 
 test('schedule requests use bearer authentication and server field names', async () => {
