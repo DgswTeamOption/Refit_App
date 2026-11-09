@@ -4,7 +4,7 @@ import { Alert, Pressable, StyleSheet, Text, TextInput, View } from 'react-nativ
 
 export type Notice = { id: string; title: string; body: string; author: string; dateLabel: string };
 export type NoticeMode = 'list' | 'write' | 'view' | 'edit' | 'delete';
-type NoticeActions = {
+export type NoticeActions = {
   create?: (input: { title: string; body: string }) => Promise<void>;
   update?: (id: string, input: { title: string; body: string }) => Promise<void>;
   remove?: (id: string) => Promise<void>;
@@ -17,7 +17,7 @@ export function NoticeScreen({ mode, notices, selected, teacher, actions, onSele
   async function submit() {
     const input = { title: title.trim(), body: body.trim() };
     if (!input.title || !input.body) return Alert.alert('제목과 내용을 입력해주세요.');
-    if (mode === 'write' && !actions?.create || mode === 'edit' && !actions?.update) return Alert.alert('준비 중', '공지 기능은 준비 중이에요.');
+    if ((mode === 'write' && !actions?.create) || (mode === 'edit' && !actions?.update)) return Alert.alert('준비 중', '공지 기능은 준비 중이에요.');
     setBusy(true);
     try {
       if (mode === 'write') { await actions?.create?.(input); onModeChange('list'); }

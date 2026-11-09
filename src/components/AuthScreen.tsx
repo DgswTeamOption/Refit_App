@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { Alert, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { emailApi } from '../services/email';
+import { useSession } from '../auth/Session';
 
 type Mode = 'login' | 'signup' | 'role';
 const blue = '#0099ff';
@@ -13,6 +14,7 @@ function Button({ label, variant = 'primary', onPress, disabled = false }: { lab
 }
 
 export function AuthScreen({ mode }: { mode: Mode }) {
+  const { signupDraft, setSignupDraft } = useSession();
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [code, setCode] = useState('');
@@ -20,7 +22,7 @@ export function AuthScreen({ mode }: { mode: Mode }) {
   const [expiresAt, setExpiresAt] = useState(0);
   const [now, setNow] = useState(0);
   const [busy, setBusy] = useState(false);
-  const [role, setRole] = useState<'student' | 'teacher'>('student');
+  const [role, setRole] = useState<'student' | 'teacher'>(signupDraft?.role === 'TEACHER' ? 'teacher' : 'student');
   const [focused, setFocused] = useState(false);
   const remaining = Math.max(0, Math.ceil((expiresAt - now) / 1000));
   useEffect(() => {
@@ -42,14 +44,21 @@ export function AuthScreen({ mode }: { mode: Mode }) {
     finally { setBusy(false); }
   }
   async function submit() {
-    if (mode === 'role') return Alert.alert('준비 중', '회원가입 기능이 준비되면 시작할 수 있어요.');
+    if (mode === 'role') {
+      if (!signupDraft) return Alert.alert('회원가입 정보를 먼저 입력해주세요.');
+      setSignupDraft({ ...signupDraft, role: role === 'teacher' ? 'TEACHER' : 'STUDENT' });
+      return Alert.alert('준비 중', '회원가입 기능이 준비되면 시작할 수 있어요.');
+    }
     if (mode === 'signup' && !name.trim()) return Alert.alert('이름을 입력해주세요.');
     if (!sent || remaining === 0 || !/^\d{6}$/.test(code)) return Alert.alert('유효한 인증코드 6자리를 입력해주세요.');
     setBusy(true);
     try {
       const result = await emailApi.verifyCode(sentEmail, code);
       if (!result.data?.is_verification) throw new Error('인증코드를 확인해주세요.');
-      if (mode === 'signup') router.push('/role');
+      if (mode === 'signup') {
+        setSignupDraft({ name: name.trim(), email: sentEmail, role: 'STUDENT' });
+        router.push('/role');
+      }
       else Alert.alert('인증 완료', '로그인 기능이 준비되면 이용할 수 있어요.');
     } catch (error) { Alert.alert('인증 실패', error instanceof Error ? error.message : '다시 시도해주세요.'); }
     finally { setBusy(false); }
