@@ -76,7 +76,7 @@ export default function ClassPage() {
       else if ((tab === '결석정보' || tab === '보강') && (action === '승인' || action === '거절')) setRequestStatus(id, rowId, action === '승인' ? 'approved' : 'rejected');
       else if (tab === '출석' && (action === '출석' || action === '결석')) markAttendance(id, rowId, today, action === '출석' ? 'present' : 'absent');
     }}
-    scheduleStudents={members.map((student, index) => ({ id: index + 1, name: student }))}
+    scheduleStudents={id === undefined ? [] : store.studentOptionsOf(id)}
     localSchedules={id === undefined ? undefined : store.schedulesOf(id)}
     onCreateLocalSchedule={id === undefined ? undefined : input => addSchedule(id, input)}
     attendanceRows={attendance.filter(a => a.student === author).map(a => ({ id: `${a.student}-${a.date}`, cells: [a.date, { label: a.status === 'present' ? '출석' : '결석', tone: a.status === 'present' ? 'blue' as const : 'red' as const }] }))}
