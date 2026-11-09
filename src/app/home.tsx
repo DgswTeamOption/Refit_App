@@ -10,5 +10,5 @@ export default function Home() {
     if (teacher) { const item = store.createClass(value, bannerUri); Alert.alert('수업이 만들어졌어요', `수업코드: ${item.code}`); }
     else store.joinClass(value);
   }
-  return <HomeScreen role={teacher ? 'teacher' : 'student'} classes={teacher ? store.teacherClasses : store.studentClasses} onSubmitClass={submit} onRemoveClass={teacher ? store.deleteClass : store.leaveClass} />;
+  return <HomeScreen role={teacher ? 'teacher' : 'student'} classes={teacher ? store.teacherClasses : store.studentClasses} onSubmitClass={submit} onRemoveClass={teacher ? store.deleteClass : store.leaveClass} notifications={store.notifications} notificationActions={{ markAllRead: async () => store.markAllRead() }} />;
 }
