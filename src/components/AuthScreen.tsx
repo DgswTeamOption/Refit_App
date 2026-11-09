@@ -1,10 +1,12 @@
 import { Image } from 'expo-image';
 import { router } from 'expo-router';
 import { useEffect, useState } from 'react';
-import { Alert, KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Alert, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { emailApi } from '../services/email';
-import { useSession } from '../auth/Session';
+import { useSession, type Session } from '../auth/Session';
+import { getGoogleIdToken } from '../auth/google';
+import { authApi, googleSession, GoogleUserNotRegistered } from '../services/auth';
 
 type Mode = 'login' | 'signup' | 'role';
 const blue = '#0099ff';
@@ -14,7 +16,7 @@ function Button({ label, variant = 'primary', onPress, disabled = false }: { lab
 }
 
 export function AuthScreen({ mode }: { mode: Mode }) {
-  const { signupDraft, setSignupDraft, setLocalUser } = useSession();
+  const { signupDraft, setSignupDraft, setLocalUser, setSession, pendingGoogleToken, setPendingGoogleToken } = useSession();
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [code, setCode] = useState('');
@@ -24,9 +26,7 @@ export function AuthScreen({ mode }: { mode: Mode }) {
   const [busy, setBusy] = useState(false);
   const [role, setRole] = useState<'student' | 'teacher'>(signupDraft?.role === 'TEACHER' ? 'teacher' : 'student');
   const [focused, setFocused] = useState(false);
-  const [googleOpen, setGoogleOpen] = useState(false);
-  const [googleEmail, setGoogleEmail] = useState('');
-  const [googleName, setGoogleName] = useState('');
+  const [googleRegistered, setGoogleRegistered] = useState(false);
   const remaining = Math.max(0, Math.ceil((expiresAt - now) / 1000));
   useEffect(() => {
     if (!expiresAt) return;
@@ -46,19 +46,38 @@ export function AuthScreen({ mode }: { mode: Mode }) {
     } catch (error) { Alert.alert('인증코드 발송 실패', error instanceof Error ? error.message : '다시 시도해주세요.'); }
     finally { setBusy(false); }
   }
-  function continueWithGoogle() {
-    const mail = googleEmail.trim();
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(mail)) return Alert.alert('Google 이메일을 확인해주세요.');
-    const display = googleName.trim() || mail.split('@')[0];
-    setGoogleOpen(false);
-    if (mode === 'signup') { setSignupDraft({ name: display, email: mail, role: 'STUDENT' }); router.push('/role'); return; }
-    const known = signupDraft && signupDraft.email === mail ? signupDraft : null;
-    const user = known ?? { name: display, email: mail, role: 'STUDENT' as const };
-    setLocalUser(user);
-    router.replace({ pathname: '/home', params: { role: user.role === 'TEACHER' ? 'teacher' : 'student' } });
+  function finishGoogleLogin(next: Session) {
+    setLocalUser(null); setSignupDraft(null); setPendingGoogleToken(null); setSession(next);
+    router.replace({ pathname: '/home', params: { role: next.user.role === 'TEACHER' ? 'teacher' : 'student' } });
+  }
+  async function continueWithGoogle() {
+    setPendingGoogleToken(null);
+    setBusy(true);
+    try {
+      const idToken = await getGoogleIdToken();
+      if (!idToken) return;
+      try { finishGoogleLogin(await googleSession(idToken)); }
+      catch (error) {
+        if (!(error instanceof GoogleUserNotRegistered)) throw error;
+        setSignupDraft(null); setPendingGoogleToken(idToken); router.push('/role');
+      }
+    } catch (error) { Alert.alert('Google 로그인 실패', error instanceof Error ? error.message : '다시 시도해주세요.'); }
+    finally { setBusy(false); }
   }
   async function submit() {
     if (mode === 'role') {
+      if (pendingGoogleToken) {
+        setBusy(true);
+        try {
+          if (!googleRegistered) {
+            await authApi.registerGoogle(pendingGoogleToken, role === 'teacher' ? 'TEACHER' : 'STUDENT');
+            setGoogleRegistered(true);
+          }
+          finishGoogleLogin(await googleSession(pendingGoogleToken));
+        } catch (error) { Alert.alert('Google 회원가입 실패', error instanceof Error && error.message ? error.message : '다시 시도해주세요.'); }
+        finally { setBusy(false); }
+        return;
+      }
       if (!signupDraft) return Alert.alert('회원가입 정보를 먼저 입력해주세요.');
       const chosen = role === 'teacher' ? 'TEACHER' as const : 'STUDENT' as const;
       setSignupDraft({ ...signupDraft, role: chosen });
@@ -72,6 +91,7 @@ export function AuthScreen({ mode }: { mode: Mode }) {
       const result = await emailApi.verifyCode(sentEmail, code);
       if (!result.data?.is_verification) throw new Error('인증코드를 확인해주세요.');
       if (mode === 'signup') {
+        setPendingGoogleToken(null);
         setSignupDraft({ name: name.trim(), email: sentEmail, role: 'STUDENT' });
         router.push('/role');
       }
@@ -94,7 +114,7 @@ export function AuthScreen({ mode }: { mode: Mode }) {
           {mode === 'role' ? <>
             {(['student', 'teacher'] as const).map(item => <Pressable key={item} accessibilityRole="radio" accessibilityState={{ checked: role === item }} onPress={() => setRole(item)} style={[styles.role, role === item && styles.roleSelected]}><Text style={styles.roleTitle}>{item === 'student' ? '학생' : '선생님'}</Text><Text style={styles.subtitle}>{item === 'student' ? '수업에 참여하고 결석·보강을 신청해요' : '수업을 만들고 출석·보강을 관리해요'}</Text></Pressable>)}
           </> : <>
-            <Button label="Google로 계속하기" variant="outline" onPress={() => setGoogleOpen(true)} />
+            <Button label="Google로 계속하기" variant="outline" disabled={busy} onPress={continueWithGoogle} />
             <View style={styles.divider}><View style={styles.line} /><Text style={styles.or}>또는</Text><View style={styles.line} /></View>
             {mode === 'signup' && <View style={styles.field}><Text style={styles.label}>이름</Text><TextInput value={name} onChangeText={setName} placeholder="이름을 입력해주세요" placeholderTextColor="#999" style={styles.input} accessibilityLabel="이름" /></View>}
             <View style={styles.field}><Text style={styles.label}>이메일</Text><View style={styles.row}><TextInput value={email} onChangeText={setEmail} placeholder="example@email.com" placeholderTextColor="#999" keyboardType="email-address" autoCapitalize="none" autoCorrect={false} style={[styles.input, styles.flexInput]} accessibilityLabel="이메일" /><View style={styles.sendButton}><Button label={sent ? '다시 받기' : '인증코드 받기'} variant={sent && remaining > 0 ? 'neutral' : 'secondary'} disabled={busy || (sent && remaining > 0)} onPress={sendCode} /></View></View>{sent && <Text style={styles.sentMessage}>인증코드를 보냈어요. 메일함을 확인해주세요.</Text>}</View>
@@ -107,16 +127,8 @@ export function AuthScreen({ mode }: { mode: Mode }) {
         <Text style={styles.footer}><Text accessibilityRole="link" onPress={() => router.push('/about')}>서비스 소개</Text>  ·  <Text accessibilityRole="link" onPress={() => router.push('/faq')}>FAQ</Text>  ·  <Text accessibilityRole="link" onPress={() => router.push('/terms')}>이용약관</Text>  ·  <Text accessibilityRole="link" onPress={() => router.push('/privacy')}>개인정보 처리방침</Text></Text>
       </ScrollView>
     </KeyboardAvoidingView>
-    <Modal transparent visible={googleOpen} animationType="fade" onRequestClose={() => setGoogleOpen(false)}><View style={styles.googleOverlay}><View style={styles.googleBox}>
-      <Text style={styles.heading}>Google로 계속하기</Text>
-      <Text style={styles.subtitle}>Google 계정 정보를 입력해주세요.</Text>
-      <TextInput value={googleName} onChangeText={setGoogleName} placeholder="이름 (선택)" placeholderTextColor="#999" style={styles.input} accessibilityLabel="Google 이름" />
-      <TextInput value={googleEmail} onChangeText={setGoogleEmail} placeholder="example@gmail.com" placeholderTextColor="#999" keyboardType="email-address" autoCapitalize="none" autoCorrect={false} style={styles.input} accessibilityLabel="Google 이메일" />
-      <Button label="계속하기" onPress={continueWithGoogle} />
-      <Button label="취소" variant="neutral" onPress={() => setGoogleOpen(false)} />
-    </View></View></Modal>
   </SafeAreaView>;
 }
-const styles = StyleSheet.create({ googleOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.3)', justifyContent: 'center', paddingHorizontal: 28 }, googleBox: { backgroundColor: '#fff', borderRadius: 12, padding: 22, gap: 12 },
+const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: '#f8f8f8' }, fill: { flex: 1 }, header: { height: 70, borderBottomWidth: 1, borderBottomColor: '#e8e8e8', justifyContent: 'center', paddingLeft: 24 }, logo: { width: 81.4689, height: 38.0832 }, scroll: { flexGrow: 1 }, form: { marginHorizontal: 28, marginTop: 40, gap: 16 }, title: { alignItems: 'center', gap: 6 }, heading: { fontSize: 24, fontWeight: '700', color: '#151515', includeFontPadding: false }, subtitle: { fontSize: 13, color: '#777', textAlign: 'center', includeFontPadding: false }, spacer: { height: 4 }, button: { height: 46, borderRadius: 8, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 16 }, primary: { backgroundColor: blue }, secondary: { backgroundColor: '#fff', borderWidth: 1, borderColor: blue }, outline: { backgroundColor: '#fff', borderWidth: 1, borderColor: '#e0e0e0' }, neutral: { backgroundColor: '#f3f3f3' }, buttonText: { fontSize: 14, fontWeight: '700', color: '#fff', includeFontPadding: false }, blueText: { color: blue }, darkText: { color: '#151515' }, neutralText: { color: '#737373' }, divider: { flexDirection: 'row', alignItems: 'center', gap: 12 }, line: { flex: 1, height: 1, backgroundColor: '#e8e8e8' }, or: { fontSize: 12, color: '#999', includeFontPadding: false }, field: { gap: 8 }, label: { fontSize: 13, fontWeight: '700', color: '#555', includeFontPadding: false }, row: { flexDirection: 'row', gap: 8 }, input: { height: 46, borderWidth: 1, borderColor: '#e0e0e0', borderRadius: 8, backgroundColor: '#fff', paddingHorizontal: 14, color: '#151515', fontSize: 14 }, flexInput: { flex: 1, minWidth: 0 }, sendButton: { width: 112 }, sentMessage: { fontSize: 12, color: blue }, codeInput: { height: 46, borderWidth: 1, borderColor: '#e0e0e0', borderRadius: 8, backgroundColor: '#fff', flexDirection: 'row', alignItems: 'center', paddingHorizontal: 14 }, focused: { borderColor: blue, borderWidth: 1.5 }, codeText: { flex: 1, fontSize: 14, color: '#151515', padding: 0 }, timer: { fontSize: 13, fontWeight: '600', color: blue }, helper: { fontSize: 12, color: '#999' }, switchText: { textAlign: 'center', fontSize: 13, color: '#7a7a7a' }, switchLink: { color: blue, fontWeight: '600' }, role: { backgroundColor: '#fff', borderColor: '#e0e0e0', borderWidth: 1, borderRadius: 12, paddingVertical: 22, alignItems: 'center', gap: 6 }, roleSelected: { borderWidth: 2, borderColor: blue, backgroundColor: '#eef7ff' }, roleTitle: { fontSize: 17, fontWeight: '700', color: '#151515' }, footer: { marginTop: 'auto', paddingTop: 40, paddingBottom: 27, textAlign: 'center', fontSize: 11, color: '#999' },
 });
