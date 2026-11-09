@@ -1,7 +1,7 @@
 {
   "expo": {
-    "name": "refit-mobile-init",
-    "slug": "refit-mobile-init",
+    "name": "Refit",
+    "slug": "refit",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
@@ -20,6 +20,11 @@
     },
     "web": {
       "favicon": "./assets/favicon.png"
-    }
+    },
+    "scheme": "refit",
+    "plugins": [
+      "expo-router",
+      "expo-image"
+    ]
   }
 }
