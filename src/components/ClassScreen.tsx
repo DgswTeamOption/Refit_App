@@ -14,7 +14,28 @@ import { ScheduleManagement, type StudentOption } from './ScheduleManagement';
 import type { Schedule, ScheduleInput } from '../services/schedule';
 
 type Role = 'student' | 'teacher';
-export function ClassScreen({ role, name, classId, notices = [], noticeActions, teacherRows, onTeacherAction, studentRequests, requestActions, notifications, notificationActions, calendarMarks, scheduleStudents, onSaveAvailability, attendanceRows, attendanceSummary, onNfc, localSchedules, onCreateLocalSchedule }: { role: Role; name: string; classId?: number; notices?: Notice[]; noticeActions?: NoticeActions; teacherRows?: Partial<Record<TeacherTab, TeacherRow[]>>; onTeacherAction?: (tab: TeacherTab, rowId: string, action: TeacherActionLabel) => void; studentRequests?: Partial<Record<'absence' | 'makeup', StudentRequest[]>>; requestActions?: Partial<Record<'absence' | 'makeup', StudentRequestActions>>; notifications?: NotificationItem[]; notificationActions?: NotificationActions; calendarMarks?: CalendarMarks; scheduleStudents?: StudentOption[]; onSaveAvailability?: (input: AvailabilityInput) => Promise<void>; attendanceRows?: TeacherRow[]; attendanceSummary?: string; onNfc?: () => void; localSchedules?: Schedule[]; onCreateLocalSchedule?: (input: ScheduleInput) => void }) {
+type ClassScreenProps = {
+  role: Role;
+  name: string;
+  classId?: number;
+  notices?: Notice[];
+  noticeActions?: NoticeActions;
+  teacherRows?: Partial<Record<TeacherTab, TeacherRow[]>>;
+  onTeacherAction?: (tab: TeacherTab, rowId: string, action: TeacherActionLabel) => void;
+  studentRequests?: Partial<Record<'absence' | 'makeup', StudentRequest[]>>;
+  requestActions?: Partial<Record<'absence' | 'makeup', StudentRequestActions>>;
+  notifications?: NotificationItem[];
+  notificationActions?: NotificationActions;
+  calendarMarks?: CalendarMarks;
+  scheduleStudents?: StudentOption[];
+  onSaveAvailability?: (input: AvailabilityInput) => Promise<void>;
+  attendanceRows?: TeacherRow[];
+  attendanceSummary?: string;
+  onNfc?: () => void;
+  localSchedules?: Schedule[];
+  onCreateLocalSchedule?: (input: ScheduleInput) => void;
+};
+export function ClassScreen({ role, name, classId, notices = [], noticeActions, teacherRows, onTeacherAction, studentRequests, requestActions, notifications, notificationActions, calendarMarks, scheduleStudents, onSaveAvailability, attendanceRows, attendanceSummary, onNfc, localSchedules, onCreateLocalSchedule }: ClassScreenProps) {
   const initial = useInitial();
   const [tab, setTab] = useState('메인');
   const [registering, setRegistering] = useState(false);

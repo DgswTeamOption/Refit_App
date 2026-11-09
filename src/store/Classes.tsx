@@ -39,6 +39,9 @@ type Value = {
   notifications: StoredNotification[];
   markAllRead: () => void;
 };
+// Monotonic counter so ids never collide, even for items created within the same millisecond.
+let seq = 0;
+const uid = () => ++seq;
 const Ctx = createContext<Value | null>(null);
 const alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
 function makeCode(taken: Set<string>) {
@@ -59,7 +62,7 @@ export function ClassesProvider({ children }: { children: ReactNode }) {
   const [members, setMembers] = useState<Record<number, string[]>>({});
   const [attendance, setAttendance] = useState<Record<number, StoredAttendance[]>>({});
   const [notifications, setNotifications] = useState<StoredNotification[]>([]);
-  const notify = useCallback((title: string, body: string) => setNotifications(prev => [{ id: `n-${Date.now()}-${prev.length}`, title, body, read: false }, ...prev]), []);
+  const notify = useCallback((title: string, body: string) => setNotifications(prev => [{ id: `n-${uid()}-${prev.length}`, title, body, read: false }, ...prev]), []);
   const createClass = useCallback((name: string, bannerUrl?: string | null) => {
     const item: StoredClass = { id: nextId, name, bannerUrl: bannerUrl ?? null, code: makeCode(new Set(classes.map(c => c.code))) };
     setNextId(nextId + 1); setClasses(prev => [...prev, item]);
@@ -84,7 +87,7 @@ export function ClassesProvider({ children }: { children: ReactNode }) {
   }, []);
   const noticesOf = useCallback((classId: number) => notices[classId] ?? [], [notices]);
   const addNotice = useCallback((classId: number, input: Input, author: string) => {
-    const item: Notice = { id: `${classId}-${Date.now()}`, title: input.title, body: input.body, author, dateLabel: dateLabel() };
+    const item: Notice = { id: `${classId}-${uid()}`, title: input.title, body: input.body, author, dateLabel: dateLabel() };
     setNotices(prev => ({ ...prev, [classId]: [item, ...(prev[classId] ?? [])] }));
     notify('새 공지', input.title);
   }, [notify]);
@@ -96,7 +99,7 @@ export function ClassesProvider({ children }: { children: ReactNode }) {
   }, []);
   const requestsOf = useCallback((classId: number) => requests[classId] ?? [], [requests]);
   const addRequest = useCallback((classId: number, input: Omit<StoredRequest, 'id' | 'status'>) => {
-    setRequests(prev => ({ ...prev, [classId]: [...(prev[classId] ?? []), { ...input, id: `${classId}-${Date.now()}`, status: 'pending' as const }] }));
+    setRequests(prev => ({ ...prev, [classId]: [...(prev[classId] ?? []), { ...input, id: `${classId}-${uid()}`, status: 'pending' as const }] }));
     notify(input.kind === 'absence' ? '결석 신청' : '보강 신청', `${input.student} · ${input.date}`);
   }, [notify]);
   const setRequestStatus = useCallback((classId: number, id: string, status: RequestStatus) => {
@@ -110,11 +113,11 @@ export function ClassesProvider({ children }: { children: ReactNode }) {
   }, []);
   const cancelRequest = useCallback((classId: number, id: string) => setRequests(prev => ({ ...prev, [classId]: (prev[classId] ?? []).filter(r => r.id !== id) })), []);
   const availabilityOf = useCallback((classId: number) => availability[classId] ?? [], [availability]);
-  const addAvailability = useCallback((classId: number, input: Omit<StoredAvailability, 'id'>) => setAvailability(prev => ({ ...prev, [classId]: [...(prev[classId] ?? []), { ...input, id: `${classId}-${Date.now()}` }] })), []);
+  const addAvailability = useCallback((classId: number, input: Omit<StoredAvailability, 'id'>) => setAvailability(prev => ({ ...prev, [classId]: [...(prev[classId] ?? []), { ...input, id: `${classId}-${uid()}` }] })), []);
   const removeAvailability = useCallback((classId: number, id: string) => setAvailability(prev => ({ ...prev, [classId]: (prev[classId] ?? []).filter(a => a.id !== id) })), []);
   const schedulesOf = useCallback((classId: number) => schedules[classId] ?? [], [schedules]);
   const addSchedule = useCallback((classId: number, input: { studentId: number; startTime: string; endTime: string }) => {
-    setSchedules(prev => ({ ...prev, [classId]: [...(prev[classId] ?? []), { ...input, classId, scheduleId: Date.now() + (prev[classId]?.length ?? 0) }] }));
+    setSchedules(prev => ({ ...prev, [classId]: [...(prev[classId] ?? []), { ...input, classId, scheduleId: uid() }] }));
   }, []);
   const markAllRead = useCallback(() => setNotifications(prev => prev.map(n => ({ ...n, read: true }))), []);
   const studentClasses = useMemo(() => classes.filter(c => joined.includes(c.id)), [classes, joined]);
