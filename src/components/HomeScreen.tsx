@@ -12,7 +12,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 type Role = 'student' | 'teacher';
 
-export function HomeScreen({ role, classes = [], notifications, notificationActions }: { role: Role; classes?: ClassSummary[]; notifications?: NotificationItem[]; notificationActions?: NotificationActions }) {
+export function HomeScreen({ role, classes = [], notifications, notificationActions, onSubmitClass, onRemoveClass }: { role: Role; classes?: ClassSummary[]; notifications?: NotificationItem[]; notificationActions?: NotificationActions; onSubmitClass?: (value: string, bannerUri?: string) => void; onRemoveClass?: (id: number) => void }) {
   const { session } = useSession();
   const [month, setMonth] = useState(() => { const now = new Date(); return new Date(now.getFullYear(), now.getMonth(), 1); });
   const [calendarResult, setCalendarResult] = useState<{ session: Session; ids: string; monthKey: string; dates: Record<number, string[]> } | null>(null);
@@ -51,6 +51,12 @@ export function HomeScreen({ role, classes = [], notifications, notificationActi
   });
   const action = teacher ? '수업 만들기' : '수업 참여하기';
   function showModal() { setValue(''); setBanner(null); setModalVisible(true); }
+  function submitClass() {
+    if (!value.trim()) return Alert.alert(teacher ? '수업 제목을 입력해주세요.' : '수업코드를 입력해주세요.');
+    if (!onSubmitClass) return Alert.alert('준비 중', `${action} 기능은 준비 중이에요.`);
+    try { onSubmitClass(value.trim(), banner?.uri); setModalVisible(false); }
+    catch (e) { Alert.alert(`${action} 실패`, e instanceof Error ? e.message : '다시 시도해주세요.'); }
+  }
   async function selectBanner() {
     try {
       const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], allowsEditing: true, aspect: [4, 1], quality: 0.8 });
@@ -65,12 +71,12 @@ export function HomeScreen({ role, classes = [], notifications, notificationActi
     <ScrollView contentContainerStyle={styles.content}>
       <Calendar marks={calendarMarks} classLegend={classLegend} month={month} onMonthChange={setMonth} />
       <View style={styles.sectionHeader}><Text style={styles.sectionTitle}>내 수업</Text><Pressable accessibilityRole="button" onPress={showModal}><Text style={styles.add}>+ {action}</Text></Pressable></View>
-      {classes.length ? <ClassCards classes={classes} role={role} /> : <View style={styles.empty}><Text style={styles.emptyText}>아직 참여한 수업이 없어요</Text><Pressable accessibilityRole="button" onPress={showModal} style={styles.emptyButton}><Image source={require('../../assets/figma/home-button.svg')} style={StyleSheet.absoluteFill} contentFit="fill" /><Text style={styles.buttonText}>{action}</Text></Pressable></View>}
+      {classes.length ? <ClassCards classes={classes} role={role} onRemove={onRemoveClass} /> : <View style={styles.empty}><Text style={styles.emptyText}>아직 참여한 수업이 없어요</Text><Pressable accessibilityRole="button" onPress={showModal} style={styles.emptyButton}><Image source={require('../../assets/figma/home-button.svg')} style={StyleSheet.absoluteFill} contentFit="fill" /><Text style={styles.buttonText}>{action}</Text></Pressable></View>}
     </ScrollView>
     <Modal transparent visible={modalVisible} animationType="fade" onRequestClose={() => setModalVisible(false)}><View style={styles.overlay}><View style={styles.modal}>
       <Text style={styles.modalTitle}>{action}</Text>
       {teacher ? <><Text style={styles.label}>수업 제목 *</Text><TextInput accessibilityLabel="수업 제목" value={value} onChangeText={setValue} placeholder="수업 제목을 입력해주세요" placeholderTextColor="#aaa" style={styles.input} /><Text style={styles.label}>배너 사진</Text><Pressable accessibilityLabel="배너 사진 선택" style={styles.photo} onPress={selectBanner}>{banner ? <Image source={{ uri: banner.uri }} style={StyleSheet.absoluteFill} contentFit="cover" /> : <Text style={styles.photoText}>사진 선택</Text>}</Pressable></> : <><Text style={styles.modalDescription}>수업코드를 입력해주세요.</Text><TextInput accessibilityLabel="수업 코드" autoCapitalize="characters" value={value} onChangeText={setValue} placeholder="수업코드를 입력해주세요" placeholderTextColor="#aaa" style={styles.input} /></>}
-      <View style={styles.modalActions}><Pressable onPress={() => setModalVisible(false)} style={[styles.modalButton, styles.cancel]}><Text style={styles.cancelText}>취소</Text></Pressable><Pressable onPress={() => Alert.alert('준비 중', `${action} 기능은 준비 중이에요.`)} style={[styles.modalButton, styles.confirm]}><Text style={styles.buttonText}>{teacher ? '만들기' : '참여하기'}</Text></Pressable></View>
+      <View style={styles.modalActions}><Pressable onPress={() => setModalVisible(false)} style={[styles.modalButton, styles.cancel]}><Text style={styles.cancelText}>취소</Text></Pressable><Pressable onPress={submitClass} style={[styles.modalButton, styles.confirm]}><Text style={styles.buttonText}>{teacher ? '만들기' : '참여하기'}</Text></Pressable></View>
     </View></View></Modal>
   </SafeAreaView>;
 }

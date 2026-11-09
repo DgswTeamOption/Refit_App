@@ -1,0 +1,70 @@
+import { createContext, useCallback, useContext, useMemo, useState, type ReactNode } from 'react';
+import type { ClassSummary } from '../components/ClassCards';
+import type { Notice } from '../components/NoticeScreen';
+
+// In-memory store used until the class/notice server APIs exist. Data resets on app restart.
+export type StoredClass = ClassSummary & { code: string };
+type Input = { title: string; body: string };
+type Value = {
+  teacherClasses: StoredClass[];
+  studentClasses: StoredClass[];
+  createClass: (name: string, bannerUrl?: string | null) => StoredClass;
+  joinClass: (code: string) => StoredClass;
+  deleteClass: (id: number) => void;
+  leaveClass: (id: number) => void;
+  noticesOf: (classId: number) => Notice[];
+  addNotice: (classId: number, input: Input, author: string) => void;
+  updateNotice: (classId: number, id: string, input: Input) => void;
+  removeNotice: (classId: number, id: string) => void;
+};
+const Ctx = createContext<Value | null>(null);
+const alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+function makeCode(taken: Set<string>) {
+  let code = '';
+  do { code = Array.from({ length: 6 }, () => alphabet[Math.floor(Math.random() * alphabet.length)]).join(''); } while (taken.has(code));
+  return code;
+}
+function dateLabel() { const d = new Date(); return `${d.getFullYear()}.${String(d.getMonth() + 1).padStart(2, '0')}.${String(d.getDate()).padStart(2, '0')}`; }
+
+export function ClassesProvider({ children }: { children: ReactNode }) {
+  const [classes, setClasses] = useState<StoredClass[]>([]);
+  const [joined, setJoined] = useState<number[]>([]);
+  const [notices, setNotices] = useState<Record<number, Notice[]>>({});
+  const [nextId, setNextId] = useState(1);
+  const createClass = useCallback((name: string, bannerUrl?: string | null) => {
+    const item: StoredClass = { id: nextId, name, bannerUrl: bannerUrl ?? null, code: makeCode(new Set(classes.map(c => c.code))) };
+    setNextId(nextId + 1); setClasses(prev => [...prev, item]);
+    return item;
+  }, [classes, nextId]);
+  const joinClass = useCallback((code: string) => {
+    const item = classes.find(c => c.code === code.trim().toUpperCase());
+    if (!item) throw new Error('수업코드를 찾을 수 없어요.');
+    if (joined.includes(item.id)) throw new Error('이미 참여한 수업이에요.');
+    setJoined(prev => [...prev, item.id]);
+    return item;
+  }, [classes, joined]);
+  const deleteClass = useCallback((id: number) => {
+    setClasses(prev => prev.filter(c => c.id !== id)); setJoined(prev => prev.filter(x => x !== id));
+    setNotices(prev => { const { [id]: _removed, ...rest } = prev; return rest; });
+  }, []);
+  const leaveClass = useCallback((id: number) => setJoined(prev => prev.filter(x => x !== id)), []);
+  const noticesOf = useCallback((classId: number) => notices[classId] ?? [], [notices]);
+  const addNotice = useCallback((classId: number, input: Input, author: string) => {
+    const item: Notice = { id: `${classId}-${Date.now()}`, title: input.title, body: input.body, author, dateLabel: dateLabel() };
+    setNotices(prev => ({ ...prev, [classId]: [item, ...(prev[classId] ?? [])] }));
+  }, []);
+  const updateNotice = useCallback((classId: number, id: string, input: Input) => {
+    setNotices(prev => ({ ...prev, [classId]: (prev[classId] ?? []).map(n => n.id === id ? { ...n, ...input } : n) }));
+  }, []);
+  const removeNotice = useCallback((classId: number, id: string) => {
+    setNotices(prev => ({ ...prev, [classId]: (prev[classId] ?? []).filter(n => n.id !== id) }));
+  }, []);
+  const studentClasses = useMemo(() => classes.filter(c => joined.includes(c.id)), [classes, joined]);
+  const value = useMemo(() => ({ teacherClasses: classes, studentClasses, createClass, joinClass, deleteClass, leaveClass, noticesOf, addNotice, updateNotice, removeNotice }), [classes, studentClasses, createClass, joinClass, deleteClass, leaveClass, noticesOf, addNotice, updateNotice, removeNotice]);
+  return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
+}
+export function useClasses() {
+  const value = useContext(Ctx);
+  if (!value) throw new Error('ClassesProvider is missing');
+  return value;
+}
