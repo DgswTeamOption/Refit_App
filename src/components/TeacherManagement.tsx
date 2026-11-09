@@ -3,16 +3,17 @@ import { useState } from 'react';
 import { Alert, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { parseServerDate } from '../services/schedule';
 import { DateTimeField } from './DateTimeField';
+import { TeacherTable, type TeacherAction, type TeacherRow } from './TeacherTable';
 
-type Tab = '학생' | '결석정보' | '출석' | '보강' | '보강설정';
-const headings: Record<Tab, string[]> = {
+export type TeacherTab = '학생' | '결석정보' | '출석' | '보강' | '보강설정';
+const headings: Record<TeacherTab, string[]> = {
   학생: ['학생', '보강/결석', '최근 결석'],
   결석정보: ['학생', '날짜', '사유', '상태'],
   출석: ['학생', '출석 상태', '관리'],
   보강: ['학생', '날짜/시간', '상태'],
   보강설정: ['날짜', '시간', '관리'],
 };
-export function TeacherManagement({ tab, addingAvailability, onAvailabilityChange }: { tab: Tab; addingAvailability: boolean; onAvailabilityChange: (active: boolean) => void }) {
+export function TeacherManagement({ tab, addingAvailability, onAvailabilityChange, rows = [], onAction }: { tab: TeacherTab; addingAvailability: boolean; onAvailabilityChange: (active: boolean) => void; rows?: TeacherRow[]; onAction?: TeacherAction }) {
   const [query, setQuery] = useState('');
   const [dateValue, setDateValue] = useState('');
   const [startTime, setStartTime] = useState('');
@@ -36,8 +37,7 @@ export function TeacherManagement({ tab, addingAvailability, onAvailabilityChang
     {tab === '학생' && <View style={styles.search}><Image source={require('../../assets/figma/student-search.svg')} style={StyleSheet.absoluteFill} contentFit="fill" /><TextInput accessibilityLabel="학생 이름 검색" value={query} onChangeText={setQuery} placeholder="학생 이름 검색" placeholderTextColor="#aaa" style={styles.searchText} /></View>}
     {tab === '출석' && <Text style={styles.date}>{date}</Text>}
     {tab === '보강설정' && <Pressable style={styles.topButton} onPress={() => onAvailabilityChange(true)}><Text style={styles.buttonText}>+ 가능 시간 추가</Text></Pressable>}
-    <View style={styles.tableHeader}><Image source={require('../../assets/figma/schedule-header.svg')} style={StyleSheet.absoluteFill} contentFit="fill" />{headings[tab].map(heading => <Text key={heading} style={styles.tableHeading}>{heading}</Text>)}</View>
-    <Text style={styles.empty}>{tab === '학생' ? '학생 정보가 없어요.' : tab === '출석' ? '출석 정보가 없어요.' : tab === '보강설정' ? '등록된 가능 시간이 없어요.' : '신청 내역이 없어요.'}</Text>
+    <TeacherTable headings={headings[tab]} rows={tab === '학생' ? rows.filter(row => typeof row.cells[0] === 'string' && row.cells[0].includes(query.trim())) : rows} emptyMessage={tab === '학생' ? '학생 정보가 없어요.' : tab === '출석' ? '출석 정보가 없어요.' : tab === '보강설정' ? '등록된 가능 시간이 없어요.' : '신청 내역이 없어요.'} onAction={onAction} />
     {tab === '출석' && <Pressable style={styles.bottomButton} onPress={() => Alert.alert('준비 중', 'QR 출석 기능은 준비 중이에요.')}><Text style={styles.buttonText}>QR사용</Text></Pressable>}
   </View>;
 }
