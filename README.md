@@ -7,6 +7,7 @@ npm install
 npx expo start
 npx eslint src
 npx tsc --noEmit
+npm test
 ```
 
 ## 서버 연결

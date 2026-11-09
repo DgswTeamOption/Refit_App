@@ -39,6 +39,12 @@ test('schedule requests use bearer authentication and server field names', async
     assert.deepEqual(JSON.parse(calls[0].options.body), { student_id: 3, start_time: '2026-08-27 16:00:00', end_time: '2026-08-27 17:00:00' });
     await scheduleApi.calendar(7, 2026, 8, 'test-token');
     assert.equal(calls[1].url, 'http://localhost:8080/api/class/calendar/7?year=2026&month=8');
+    await scheduleApi.update(7, 42, { startTime: '2026-08-28 16:00:00', endTime: '2026-08-28 17:00:00' }, 'test-token');
+    assert.equal(calls[2].options.method, 'PATCH');
+    assert.deepEqual(JSON.parse(calls[2].options.body), { start_time: '2026-08-28 16:00:00', end_time: '2026-08-28 17:00:00' });
+    await scheduleApi.remove(7, 42, 'test-token');
+    assert.equal(calls[3].url, 'http://localhost:8080/api/class/schedule/7/42');
+    assert.equal(calls[3].options.method, 'DELETE');
   } finally { global.fetch = originalFetch; }
 });
 

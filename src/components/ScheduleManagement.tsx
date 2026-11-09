@@ -1,7 +1,7 @@
 import { Image } from 'expo-image';
 import { useEffect, useMemo, useState } from 'react';
 import { Alert, Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
-import { useSession } from '../auth/Session';
+import { useSession, type Session } from '../auth/Session';
 import { parseServerDate, scheduleApi, type Schedule } from '../services/schedule';
 import { DateTimeField } from './DateTimeField';
 import { TimeRangeField } from './TimeRangeField';
@@ -10,7 +10,7 @@ const weekdays = ['일', '월', '화', '수', '목', '금', '토'];
 type StudentOption = { id: number; name: string };
 export function ScheduleManagement({ classId, registration, onRegisterChange, students: availableStudents = [] }: { classId?: number; registration: boolean; onRegisterChange: (active: boolean) => void; students?: StudentOption[] }) {
   const { session } = useSession();
-  const [result, setResult] = useState<{ key: string; schedules?: Schedule[]; error?: string } | null>(null);
+  const [result, setResult] = useState<{ session: Session; classId: number; revision: number; schedules?: Schedule[]; error?: string } | null>(null);
   const [choosingStudent, setChoosingStudent] = useState(false);
   const [studentId, setStudentId] = useState<number | null>(null);
   const [date, setDate] = useState('');
@@ -18,16 +18,15 @@ export function ScheduleManagement({ classId, registration, onRegisterChange, st
   const [end, setEnd] = useState('');
   const [busy, setBusy] = useState(false);
   const [revision, setRevision] = useState(0);
-  const requestKey = session && classId ? `${session.user.id}:${classId}:${session.accessToken}:${revision}` : '';
-  const current = result?.key === requestKey ? result : null;
+  const current = result && result.session === session && result.classId === classId && result.revision === revision ? result : null;
   useEffect(() => {
     if (!session || !classId) return;
     let active = true;
     scheduleApi.list(classId, session.accessToken).then(data => {
-      if (active) setResult({ key: requestKey, schedules: data ?? [] });
-    }).catch(e => { if (active) setResult({ key: requestKey, error: e instanceof Error ? e.message : '일정을 불러오지 못했어요.' }); });
+      if (active) setResult({ session, classId, revision, schedules: data ?? [] });
+    }).catch(e => { if (active) setResult({ session, classId, revision, error: e instanceof Error ? e.message : '일정을 불러오지 못했어요.' }); });
     return () => { active = false; };
-  }, [classId, session, requestKey]);
+  }, [classId, session, revision]);
   const rows = useMemo(() => (current?.schedules ?? []).map(item => ({ ...item, start: parseServerDate(item.startTime) })).filter(item => item.start.isValid()).sort((a, b) => a.start.valueOf() - b.start.valueOf()), [current?.schedules]);
   const days = useMemo(() => { const found = [...new Set(rows.map(item => item.start.day()))].sort((a, b) => a - b); return found.length ? found : [1, 3, 5]; }, [rows]);
   const students = useMemo(() => [...new Set(rows.map(item => item.studentId))].sort((a, b) => a - b), [rows]);
