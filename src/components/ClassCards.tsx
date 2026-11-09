@@ -1,9 +1,10 @@
 import { Image } from 'expo-image';
 import { router } from 'expo-router';
 import { useState } from 'react';
+import type { ClassCalendarColor } from './Calendar';
 import { Alert, Modal, Pressable, StyleSheet, Text, View } from 'react-native';
 
-export type ClassSummary = { id: number; name: string; bannerUrl?: string | null };
+export type ClassSummary = { id: number; name: string; bannerUrl?: string | null; color?: ClassCalendarColor; calendarDates?: string[] };
 const banners = [require('../../assets/figma/class-banner-peach.svg'), require('../../assets/figma/class-banner-purple.svg'), require('../../assets/figma/class-banner-yellow.svg')];
 export function ClassCards({ classes, role }: { classes: ClassSummary[]; role: 'student' | 'teacher' }) {
   const [selected, setSelected] = useState<ClassSummary | null>(null);

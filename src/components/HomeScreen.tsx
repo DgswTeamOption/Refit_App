@@ -2,7 +2,7 @@ import { Image } from 'expo-image';
 import * as ImagePicker from 'expo-image-picker';
 import { useState } from 'react';
 import { router } from 'expo-router';
-import { Calendar } from './Calendar';
+import { Calendar, type CalendarMarks, type ClassCalendarColor } from './Calendar';
 import { NotificationBell, type NotificationActions, type NotificationItem } from './NotificationBell';
 import { ClassCards, type ClassSummary } from './ClassCards';
 import { Alert, Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
@@ -15,6 +15,15 @@ export function HomeScreen({ role, classes = [], notifications, notificationActi
   const [value, setValue] = useState('');
   const [banner, setBanner] = useState<ImagePicker.ImagePickerAsset | null>(null);
   const teacher = role === 'teacher';
+  const colors: ClassCalendarColor[] = ['peach', 'purple', 'yellow', 'mint'];
+  const classLegend = classes.map((item, index) => ({ label: item.name, color: item.color ?? colors[index % colors.length] }));
+  const calendarMarks: CalendarMarks = {};
+  classes.forEach((item, index) => {
+    const color = item.color ?? colors[index % colors.length];
+    [...new Set(item.calendarDates ?? [])].forEach(date => {
+      if (/^\d{4}-\d{2}-\d{2}$/.test(date)) (calendarMarks[date] ??= []).push({ color, label: item.name });
+    });
+  });
   const action = teacher ? '수업 만들기' : '수업 참여하기';
   function showModal() { setValue(''); setBanner(null); setModalVisible(true); }
   async function selectBanner() {
@@ -29,7 +38,7 @@ export function HomeScreen({ role, classes = [], notifications, notificationActi
       <View style={styles.actions}><NotificationBell items={notifications} actions={notificationActions} /><Pressable accessibilityRole="button" accessibilityLabel="프로필" onPress={() => router.push('/profile')} style={styles.avatar}><Image source={require('../../assets/figma/avatar.svg')} style={StyleSheet.absoluteFill} contentFit="contain" /><Text style={styles.avatarText}>학</Text></Pressable></View>
     </View>
     <ScrollView contentContainerStyle={styles.content}>
-      <Calendar />
+      <Calendar marks={calendarMarks} classLegend={classLegend} />
       <View style={styles.sectionHeader}><Text style={styles.sectionTitle}>내 수업</Text><Pressable accessibilityRole="button" onPress={showModal}><Text style={styles.add}>+ {action}</Text></Pressable></View>
       {classes.length ? <ClassCards classes={classes} role={role} /> : <View style={styles.empty}><Text style={styles.emptyText}>아직 참여한 수업이 없어요</Text><Pressable accessibilityRole="button" onPress={showModal} style={styles.emptyButton}><Image source={require('../../assets/figma/home-button.svg')} style={StyleSheet.absoluteFill} contentFit="fill" /><Text style={styles.buttonText}>{action}</Text></Pressable></View>}
     </ScrollView>
