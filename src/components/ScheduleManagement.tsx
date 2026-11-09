@@ -3,15 +3,23 @@ import { useEffect, useMemo, useState } from 'react';
 import { Alert, Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSession } from '../auth/Session';
 import { parseServerDate, scheduleApi, type Schedule } from '../services/schedule';
+import { DateTimeField } from './DateTimeField';
+import { TimeRangeField } from './TimeRangeField';
 
 const weekdays = ['일', '월', '화', '수', '목', '금', '토'];
-export function ScheduleManagement({ classId, registration, onRegisterChange }: { classId?: number; registration: boolean; onRegisterChange: (active: boolean) => void }) {
+type StudentOption = { id: number; name: string };
+export function ScheduleManagement({ classId, registration, onRegisterChange, students: availableStudents = [] }: { classId?: number; registration: boolean; onRegisterChange: (active: boolean) => void; students?: StudentOption[] }) {
   const { session } = useSession();
   const [result, setResult] = useState<{ key: string; schedules?: Schedule[]; error?: string } | null>(null);
-  const [choosingDay, setChoosingDay] = useState(false);
-  const requestKey = session && classId ? `${session.user.id}:${classId}:${session.accessToken}` : '';
+  const [choosingStudent, setChoosingStudent] = useState(false);
+  const [studentId, setStudentId] = useState<number | null>(null);
+  const [date, setDate] = useState('');
+  const [start, setStart] = useState('');
+  const [end, setEnd] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [revision, setRevision] = useState(0);
+  const requestKey = session && classId ? `${session.user.id}:${classId}:${session.accessToken}:${revision}` : '';
   const current = result?.key === requestKey ? result : null;
-  const [day, setDay] = useState<number | null>(null);
   useEffect(() => {
     if (!session || !classId) return;
     let active = true;
@@ -24,14 +32,30 @@ export function ScheduleManagement({ classId, registration, onRegisterChange }: 
   const days = useMemo(() => { const found = [...new Set(rows.map(item => item.start.day()))].sort((a, b) => a - b); return found.length ? found : [1, 3, 5]; }, [rows]);
   const students = useMemo(() => [...new Set(rows.map(item => item.studentId))].sort((a, b) => a - b), [rows]);
   function openRegistration() { onRegisterChange(true); }
-  function unavailable() { Alert.alert('준비 중', '학생 목록과 요일별 반복 일정 등록 기능은 준비 중이에요.'); }
+  function selectStudent() {
+    if (!availableStudents.length) return Alert.alert('준비 중', '학생 목록 기능은 준비 중이에요.');
+    setChoosingStudent(true);
+  }
+  async function createSchedule() {
+    if (!session || !classId) return Alert.alert('로그인과 수업 정보가 필요해요.');
+    if (!studentId) return Alert.alert('학생을 선택해주세요.');
+    const startDate = parseServerDate(`${date} ${start}:00`);
+    const endDate = parseServerDate(`${date} ${end}:00`);
+    if (!startDate.isValid() || !endDate.isValid() || !endDate.isAfter(startDate)) return Alert.alert('날짜와 시간을 확인해주세요.');
+    setBusy(true);
+    try {
+      await scheduleApi.create(classId, { studentId, startTime: startDate.format('YYYY-MM-DD HH:mm:ss'), endTime: endDate.format('YYYY-MM-DD HH:mm:ss') }, session.accessToken);
+      setRevision(value => value + 1); onRegisterChange(false);
+    } catch (e) { Alert.alert('일정 등록 실패', e instanceof Error ? e.message : '다시 시도해주세요.'); }
+    finally { setBusy(false); }
+  }
   const status = !session ? '로그인이 필요해요.' : !classId ? '수업 정보가 필요해요.' : !current ? '일정을 불러오는 중이에요.' : current.error || '등록된 일정이 없어요.';
   return <View style={styles.content}>{registration ? <>
-    <Text style={styles.label}>학생</Text><Pressable style={styles.input} onPress={unavailable}><Image source={require('../../assets/figma/schedule-input.svg')} style={StyleSheet.absoluteFill} contentFit="fill" /><Text style={styles.placeholder}>학생 선택</Text></Pressable>
-    <Text style={styles.label}>요일</Text><Pressable style={styles.input} onPress={() => setChoosingDay(true)}><Image source={require('../../assets/figma/schedule-input.svg')} style={StyleSheet.absoluteFill} contentFit="fill" /><Text style={styles.placeholder}>{day === null ? '요일 선택' : `${weekdays[day]}요일`}</Text></Pressable>
-    <Modal transparent visible={choosingDay} animationType="fade" onRequestClose={() => setChoosingDay(false)}><View style={styles.overlay}><View style={styles.choices}>{weekdays.map((label, index) => <Pressable key={label} onPress={() => { setDay(index); setChoosingDay(false); }} style={styles.choice}><Text style={styles.choiceText}>{label}요일</Text></Pressable>)}<Pressable onPress={() => setChoosingDay(false)} style={styles.choice}><Text style={styles.choiceText}>취소</Text></Pressable></View></View></Modal>
-    <Text style={styles.label}>수업 시간</Text><Pressable style={styles.input} onPress={unavailable}><Image source={require('../../assets/figma/schedule-input.svg')} style={StyleSheet.absoluteFill} contentFit="fill" /><Text style={styles.placeholder}>시간 선택</Text></Pressable>
-    <Pressable style={styles.register} onPress={unavailable}><Image source={require('../../assets/figma/apply-button.svg')} style={StyleSheet.absoluteFill} contentFit="fill" /><Text style={styles.buttonText}>등록</Text></Pressable>
+    <Text style={styles.label}>학생</Text><Pressable style={styles.input} onPress={selectStudent}><Image source={require('../../assets/figma/schedule-input.svg')} style={StyleSheet.absoluteFill} contentFit="fill" /><Text style={styles.placeholder}>{availableStudents.find(student => student.id === studentId)?.name ?? '학생 선택'}</Text></Pressable>
+    <Modal transparent visible={choosingStudent} animationType="fade" onRequestClose={() => setChoosingStudent(false)}><View style={styles.overlay}><View style={styles.choices}>{availableStudents.map(student => <Pressable key={student.id} onPress={() => { setStudentId(student.id); setChoosingStudent(false); }} style={styles.choice}><Text style={styles.choiceText}>{student.name}</Text></Pressable>)}<Pressable onPress={() => setChoosingStudent(false)} style={styles.choice}><Text style={styles.choiceText}>취소</Text></Pressable></View></View></Modal>
+    <Text style={styles.label}>요일</Text><DateTimeField mode="date" value={date} onChange={setDate} />
+    <Text style={styles.label}>수업 시간</Text><TimeRangeField start={start} end={end} onChange={(nextStart, nextEnd) => { setStart(nextStart); setEnd(nextEnd); }} />
+    <Pressable disabled={busy} style={styles.register} onPress={createSchedule}><Image source={require('../../assets/figma/apply-button.svg')} style={StyleSheet.absoluteFill} contentFit="fill" /><Text style={styles.buttonText}>등록</Text></Pressable>
     <View style={styles.registrationHeader}><Image source={require('../../assets/figma/schedule-header.svg')} style={StyleSheet.absoluteFill} contentFit="fill" /><Text style={styles.headerCell}>학생</Text><Text style={styles.headerCell}>날짜/시간</Text></View>
     {rows.length ? rows.map(item => <View key={item.scheduleId} style={styles.registrationRow}><Image source={require('../../assets/figma/schedule-row.svg')} style={StyleSheet.absoluteFill} contentFit="fill" /><Text style={styles.cell}>학생 #{item.studentId}</Text><Text style={styles.cell}>{item.start.format('YYYY.MM.DD HH:mm')}</Text></View>) : <Text style={styles.empty}>{status}</Text>}
   </> : <>
