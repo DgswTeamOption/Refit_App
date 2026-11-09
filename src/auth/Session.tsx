@@ -3,7 +3,7 @@ import { createContext, useContext, useMemo, useState, type Dispatch, type React
 export type Session = { accessToken: string; refreshToken: string; user: { id: number; name: string; role: 'STUDENT' | 'TEACHER' } };
 export type SignupDraft = { name: string; email: string; role: 'STUDENT' | 'TEACHER' };
 export type LocalUser = { name: string; email: string; role: 'STUDENT' | 'TEACHER' };
-type SessionContextValue = { localUser: LocalUser | null; setLocalUser: (user: LocalUser | null) => void; session: Session | null; setSession: Dispatch<SetStateAction<Session | null>>; signupDraft: SignupDraft | null; setSignupDraft: (draft: SignupDraft | null) => void };
+type SessionContextValue = { localUser: LocalUser | null; setLocalUser: (user: LocalUser | null) => void; session: Session | null; setSession: Dispatch<SetStateAction<Session | null>>; signupDraft: SignupDraft | null; setSignupDraft: (draft: SignupDraft | null) => void; pendingGoogleToken: string | null; setPendingGoogleToken: (token: string | null) => void };
 const SessionContext = createContext<SessionContextValue | null>(null);
 
 // The future login/signup response can be passed to setSession once those APIs exist.
@@ -12,7 +12,8 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   // UI-only user used until the login/signup APIs exist. It carries no token, so no server calls are made with it.
   const [localUser, setLocalUser] = useState<LocalUser | null>(null);
   const [signupDraft, setSignupDraft] = useState<SignupDraft | null>(null);
-  const value = useMemo(() => ({ localUser, setLocalUser, session, setSession, signupDraft, setSignupDraft }), [localUser, session, signupDraft]);
+  const [pendingGoogleToken, setPendingGoogleToken] = useState<string | null>(null);
+  const value = useMemo(() => ({ localUser, setLocalUser, session, setSession, signupDraft, setSignupDraft, pendingGoogleToken, setPendingGoogleToken }), [localUser, session, signupDraft, pendingGoogleToken]);
   return <SessionContext.Provider value={value}>{children}</SessionContext.Provider>;
 }
 export function useSession() {
