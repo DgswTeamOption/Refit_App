@@ -8,7 +8,7 @@ export function StudentRequests({ kind }: { kind: 'absence' | 'makeup' }) {
   const [date, setDate] = useState('');
   const [reason, setReason] = useState('');
   const label = kind === 'absence' ? '결석' : '보강';
-  return <View style={styles.content}><Calendar onSelect={form ? setDate : undefined} />
+  return <View style={styles.content}><Calendar showLegend onSelect={form ? setDate : undefined} />
     {form ? <><Text style={styles.label}>신청 날짜</Text><View style={styles.date}><Image source={require('../../assets/figma/date-input.svg')} style={StyleSheet.absoluteFill} contentFit="fill" /><Text style={[styles.dateText, date && styles.value]}>{date || '날짜를 선택해주세요'}</Text></View><Text style={styles.label}>신청 사유</Text><View style={styles.reason}><Image source={require('../../assets/figma/reason-input.svg')} style={StyleSheet.absoluteFill} contentFit="fill" /><TextInput accessibilityLabel="신청 사유" value={reason} onChangeText={setReason} multiline placeholder="사유를 입력해주세요" placeholderTextColor="#aaa" style={styles.reasonText} /></View><Pressable accessibilityRole="button" style={styles.apply} onPress={() => Alert.alert('준비 중', `${label} 신청 기능은 준비 중이에요.`)}><Image source={require('../../assets/figma/apply-button.svg')} style={StyleSheet.absoluteFill} contentFit="fill" /><Text style={styles.buttonText}>신청하기</Text></Pressable></> : <><Pressable accessibilityRole="button" style={styles.open} onPress={() => setForm(true)}><Text style={styles.buttonText}>{label} 신청하기</Text></Pressable><Text style={styles.history}>신청 내역</Text><Text style={styles.empty}>신청 내역이 없어요.</Text></>}
   </View>;
 }
