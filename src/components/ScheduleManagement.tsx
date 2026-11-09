@@ -11,7 +11,6 @@ export function ScheduleManagement({ classId, registration, onRegisterChange }: 
   const [choosingDay, setChoosingDay] = useState(false);
   const requestKey = session && classId ? `${session.user.id}:${classId}:${session.accessToken}` : '';
   const current = result?.key === requestKey ? result : null;
-  const schedules = current?.schedules ?? [];
   const [day, setDay] = useState<number | null>(null);
   useEffect(() => {
     if (!session || !classId) return;
@@ -21,7 +20,7 @@ export function ScheduleManagement({ classId, registration, onRegisterChange }: 
     }).catch(e => { if (active) setResult({ key: requestKey, error: e instanceof Error ? e.message : '일정을 불러오지 못했어요.' }); });
     return () => { active = false; };
   }, [classId, session, requestKey]);
-  const rows = useMemo(() => schedules.map(item => ({ ...item, start: parseServerDate(item.startTime) })).filter(item => item.start.isValid()), [schedules]);
+  const rows = useMemo(() => (current?.schedules ?? []).map(item => ({ ...item, start: parseServerDate(item.startTime) })).filter(item => item.start.isValid()).sort((a, b) => a.start.valueOf() - b.start.valueOf()), [current?.schedules]);
   const days = useMemo(() => { const found = [...new Set(rows.map(item => item.start.day()))].sort((a, b) => a - b); return found.length ? found : [1, 3, 5]; }, [rows]);
   const students = useMemo(() => [...new Set(rows.map(item => item.studentId))].sort((a, b) => a - b), [rows]);
   function openRegistration() { onRegisterChange(true); }

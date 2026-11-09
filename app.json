@@ -24,7 +24,9 @@
     "scheme": "refit",
     "plugins": [
       "expo-router",
-      "expo-image"
+      "expo-image",
+      "expo-build-properties",
+      "@react-native-community/datetimepicker"
     ]
   }
 }
