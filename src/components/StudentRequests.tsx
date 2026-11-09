@@ -1,7 +1,7 @@
 import { Image } from 'expo-image';
 import { useState } from 'react';
 import { Alert, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
-import { Calendar } from './Calendar';
+import { Calendar, type CalendarMarks } from './Calendar';
 
 export type StudentRequest = { id: string; dateLabel: string; statusLabel: string; canCancel: boolean };
 export type StudentRequestActions = {
@@ -9,7 +9,7 @@ export type StudentRequestActions = {
   cancel?: (id: string) => Promise<void>;
   view?: (id: string) => void;
 };
-export function StudentRequests({ kind, requests = [], actions }: { kind: 'absence' | 'makeup'; requests?: StudentRequest[]; actions?: StudentRequestActions }) {
+export function StudentRequests({ kind, requests = [], actions, calendarMarks }: { kind: 'absence' | 'makeup'; requests?: StudentRequest[]; actions?: StudentRequestActions; calendarMarks?: CalendarMarks }) {
   const [form, setForm] = useState(false);
   const [date, setDate] = useState('');
   const [reason, setReason] = useState('');
@@ -30,7 +30,7 @@ export function StudentRequests({ kind, requests = [], actions }: { kind: 'absen
     catch (e) { Alert.alert('취소 실패', e instanceof Error ? e.message : '다시 시도해주세요.'); }
     finally { setBusy(false); }
   }
-  return <View style={styles.content}><Calendar showLegend onSelect={form ? setDate : undefined} />
+  return <View style={styles.content}><Calendar showLegend marks={calendarMarks} onSelect={form ? setDate : undefined} />
     {form ? <><Text style={styles.label}>신청 날짜</Text><View style={styles.date}><Image source={require('../../assets/figma/date-input.svg')} style={StyleSheet.absoluteFill} contentFit="fill" /><Text style={[styles.dateText, !!date && styles.value]}>{date || '날짜를 선택해주세요'}</Text></View><Text style={styles.label}>신청 사유</Text><View style={styles.reason}><Image source={require('../../assets/figma/reason-input.svg')} style={StyleSheet.absoluteFill} contentFit="fill" /><TextInput accessibilityLabel="신청 사유" value={reason} onChangeText={setReason} multiline placeholder="사유를 입력해주세요" placeholderTextColor="#aaa" style={styles.reasonText} /></View><Pressable accessibilityRole="button" disabled={busy} style={styles.apply} onPress={submit}><Image source={require('../../assets/figma/apply-button.svg')} style={StyleSheet.absoluteFill} contentFit="fill" /><Text style={styles.buttonText}>신청하기</Text></Pressable></> : <><Pressable accessibilityRole="button" style={styles.open} onPress={() => setForm(true)}><Text style={styles.buttonText}>{label} 신청하기</Text></Pressable><Text style={styles.history}>신청 내역</Text>{requests.length ? requests.map(item => <View key={item.id} style={styles.row}><Image source={require('../../assets/figma/request-row.svg')} style={StyleSheet.absoluteFill} contentFit="fill" /><Text style={styles.rowText}>{item.dateLabel} · {item.statusLabel}</Text><Pressable disabled={busy} onPress={() => item.canCancel ? cancel(item.id) : actions?.view ? actions.view(item.id) : Alert.alert('준비 중', '상태 조회 기능은 준비 중이에요.')}><Text style={[styles.rowAction, !item.canCancel && styles.statusAction]}>{item.canCancel ? '취소' : '상태 보기'}</Text></Pressable></View>) : <Text style={styles.empty}>신청 내역이 없어요.</Text>}</>}
   </View>;
 }
