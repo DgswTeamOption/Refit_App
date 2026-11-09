@@ -20,7 +20,7 @@ export function HomeScreen({ role, classes = [], notifications, notificationActi
   const [modalVisible, setModalVisible] = useState(false);
   const [value, setValue] = useState('');
   const [banner, setBanner] = useState<ImagePicker.ImagePickerAsset | null>(null);
-  const ids = [...new Set(classes.map(item => item.id).filter(id => Number.isSafeInteger(id) && id > 0))].sort((a, b) => a - b).join(',');
+  const ids = [...new Set(classes.filter(item => item.source === 'server').map(item => item.id).filter(id => Number.isSafeInteger(id) && id > 0))].sort((a, b) => a - b).join(',');
   const monthKey = `${month.getFullYear()}-${month.getMonth() + 1}`;
   useEffect(() => {
     if (!session || !ids) return;
@@ -46,7 +46,7 @@ export function HomeScreen({ role, classes = [], notifications, notificationActi
   const calendarMarks: CalendarMarks = {};
   classes.forEach((item, index) => {
     const color = item.color ?? colors[index % colors.length];
-    [...new Set(currentDates[item.id] ?? item.calendarDates ?? [])].forEach(date => {
+    [...new Set((item.source === 'server' ? currentDates[item.id] : undefined) ?? item.calendarDates ?? [])].forEach(date => {
       if (/^\d{4}-\d{2}-\d{2}$/.test(date)) (calendarMarks[date] ??= []).push({ color, label: item.name });
     });
   });

@@ -1,6 +1,5 @@
 import { useLocalSearchParams } from 'expo-router';
 import { useMemo } from 'react';
-import { Alert } from 'react-native';
 import { ClassScreen } from '../components/ClassScreen';
 import type { NoticeActions } from '../components/NoticeScreen';
 import type { StudentRequest, StudentRequestActions } from '../components/StudentRequests';
@@ -89,7 +88,6 @@ export default function ClassPage() {
     onCreateLocalSchedule={id === undefined ? undefined : input => addSchedule(id, input)}
     attendanceRows={attendance.filter(a => a.student === author).map(a => ({ id: `${a.student}-${a.date}`, cells: [a.date, { label: a.status === 'present' ? '출석' : '결석', tone: a.status === 'present' ? 'blue' as const : 'red' as const }] }))}
     attendanceSummary={`이번달 출석 ${attendance.filter(a => a.status === 'present' && a.date.slice(0, 7) === today.slice(0, 7)).length}건 · 결석 ${attendance.filter(a => a.status === 'absent' && a.date.slice(0, 7) === today.slice(0, 7)).length}건`}
-    onNfc={id === undefined ? undefined : () => { markAttendance(id, author, today, 'present'); Alert.alert('출석 완료', '오늘 출석이 기록됐어요.'); }}
     onSaveAvailability={id === undefined ? undefined : async input => addAvailability(id, input)}
     notifications={store.notifications} notificationActions={{ markAllRead: async () => markAllRead() }}
     calendarMarks={calendarMarks}

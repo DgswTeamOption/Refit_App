@@ -64,7 +64,7 @@ export function ClassesProvider({ children }: { children: ReactNode }) {
   const [notifications, setNotifications] = useState<StoredNotification[]>([]);
   const notify = useCallback((title: string, body: string) => setNotifications(prev => [{ id: `n-${uid()}-${prev.length}`, title, body, read: false }, ...prev]), []);
   const createClass = useCallback((name: string, bannerUrl?: string | null) => {
-    const item: StoredClass = { id: nextId, name, bannerUrl: bannerUrl ?? null, code: makeCode(new Set(classes.map(c => c.code))) };
+    const item: StoredClass = { id: nextId, name, source: 'local', bannerUrl: bannerUrl ?? null, code: makeCode(new Set(classes.map(c => c.code))) };
     setNextId(nextId + 1); setClasses(prev => [...prev, item]);
     return item;
   }, [classes, nextId]);

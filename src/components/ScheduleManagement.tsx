@@ -18,17 +18,19 @@ export function ScheduleManagement({ classId, registration, onRegisterChange, st
   const [end, setEnd] = useState('');
   const [busy, setBusy] = useState(false);
   const [revision, setRevision] = useState(0);
+  const localMode = localSchedules !== undefined;
   const current = result && result.session === session && result.classId === classId && result.revision === revision ? result : null;
   useEffect(() => {
-    if (!session || !classId) return;
+    if (localMode || !session || !classId) return;
     let active = true;
     scheduleApi.list(classId, session.accessToken).then(data => {
       if (active) setResult({ session, classId, revision, schedules: data ?? [] });
     }).catch(e => { if (active) setResult({ session, classId, revision, error: e instanceof Error ? e.message : '일정을 불러오지 못했어요.' }); });
     return () => { active = false; };
-  }, [classId, session, revision]);
-  const rows = useMemo(() => ((session ? current?.schedules : localSchedules) ?? []).map(item => ({ ...item, start: parseServerDate(item.startTime) })).filter(item => item.start.isValid()).sort((a, b) => a.start.valueOf() - b.start.valueOf()), [session, current?.schedules, localSchedules]);
-  const invalidCount = ((session ? current?.schedules : localSchedules)?.length ?? 0) - rows.length;
+  }, [classId, session, revision, localMode]);
+  const schedules = localMode ? localSchedules : current?.schedules;
+  const rows = useMemo(() => (schedules ?? []).map(item => ({ ...item, start: parseServerDate(item.startTime) })).filter(item => item.start.isValid()).sort((a, b) => a.start.valueOf() - b.start.valueOf()), [schedules]);
+  const invalidCount = (schedules?.length ?? 0) - rows.length;
   const days = useMemo(() => { const found = [...new Set(rows.map(item => item.start.day()))].sort((a, b) => a - b); return found.length ? found : [1, 3, 5]; }, [rows]);
   const students = useMemo(() => [...new Set(rows.map(item => item.studentId))].sort((a, b) => a - b), [rows]);
   function openRegistration() { onRegisterChange(true); }
@@ -37,13 +39,13 @@ export function ScheduleManagement({ classId, registration, onRegisterChange, st
     setChoosingStudent(true);
   }
   async function createSchedule() {
-    if (!classId || (!session && !onCreateLocal)) return Alert.alert('로그인과 수업 정보가 필요해요.');
+    if (!classId || (localMode ? !onCreateLocal : !session)) return Alert.alert('로그인과 수업 정보가 필요해요.');
     if (session && session.user.role !== 'TEACHER') return Alert.alert('선생님만 일정을 등록할 수 있어요.');
     if (!studentId) return Alert.alert('학생을 선택해주세요.');
     const startDate = parseServerDate(`${date} ${start}:00`);
     const endDate = parseServerDate(`${date} ${end}:00`);
     if (!startDate.isValid() || !endDate.isValid() || !endDate.isAfter(startDate)) return Alert.alert('날짜와 시간을 확인해주세요.');
-    if (!session && onCreateLocal) { onCreateLocal({ studentId, startTime: startDate.format('YYYY-MM-DD HH:mm:ss'), endTime: endDate.format('YYYY-MM-DD HH:mm:ss') }); onRegisterChange(false); return; }
+    if (localMode && onCreateLocal) { onCreateLocal({ studentId, startTime: startDate.format('YYYY-MM-DD HH:mm:ss'), endTime: endDate.format('YYYY-MM-DD HH:mm:ss') }); onRegisterChange(false); return; }
     if (!session) return;
     setBusy(true);
     try {
@@ -53,7 +55,7 @@ export function ScheduleManagement({ classId, registration, onRegisterChange, st
     finally { setBusy(false); }
   }
   const nameOf = (id: number) => availableStudents.find(student => student.id === id)?.name ?? `학생 #${id}`;
-  const status = !session && localSchedules ? '등록된 일정이 없어요.' : !session ? '로그인이 필요해요.' : !classId ? '수업 정보가 필요해요.' : !current ? '일정을 불러오는 중이에요.' : current.error || '등록된 일정이 없어요.';
+  const status = localMode ? '등록된 일정이 없어요.' : !session ? '로그인이 필요해요.' : !classId ? '수업 정보가 필요해요.' : !current ? '일정을 불러오는 중이에요.' : current.error || '등록된 일정이 없어요.';
   return <View style={styles.content}>{invalidCount > 0 && <Text style={styles.warning}>날짜 형식이 올바르지 않은 일정 {invalidCount}개를 표시하지 못했어요.</Text>}{registration ? <>
     <Text style={styles.label}>학생</Text><Pressable style={styles.input} onPress={selectStudent}><Image source={require('../../assets/figma/schedule-input.svg')} style={StyleSheet.absoluteFill} contentFit="fill" /><Text style={styles.placeholder}>{availableStudents.find(student => student.id === studentId)?.name ?? '학생 선택'}</Text></Pressable>
     <Modal transparent visible={choosingStudent} animationType="fade" onRequestClose={() => setChoosingStudent(false)}><View style={styles.overlay}><View style={styles.choices}>{availableStudents.map(student => <Pressable key={student.id} onPress={() => { setStudentId(student.id); setChoosingStudent(false); }} style={styles.choice}><Text style={styles.choiceText}>{student.name}</Text></Pressable>)}<Pressable onPress={() => setChoosingStudent(false)} style={styles.choice}><Text style={styles.choiceText}>취소</Text></Pressable></View></View></Modal>
