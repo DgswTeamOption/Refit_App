@@ -7,7 +7,7 @@ import { DateTimeField } from './DateTimeField';
 import { TimeRangeField } from './TimeRangeField';
 
 const weekdays = ['일', '월', '화', '수', '목', '금', '토'];
-type StudentOption = { id: number; name: string };
+export type StudentOption = { id: number; name: string };
 export function ScheduleManagement({ classId, registration, onRegisterChange, students: availableStudents = [] }: { classId?: number; registration: boolean; onRegisterChange: (active: boolean) => void; students?: StudentOption[] }) {
   const { session } = useSession();
   const [result, setResult] = useState<{ session: Session; classId: number; revision: number; schedules?: Schedule[]; error?: string } | null>(null);
@@ -28,6 +28,7 @@ export function ScheduleManagement({ classId, registration, onRegisterChange, st
     return () => { active = false; };
   }, [classId, session, revision]);
   const rows = useMemo(() => (current?.schedules ?? []).map(item => ({ ...item, start: parseServerDate(item.startTime) })).filter(item => item.start.isValid()).sort((a, b) => a.start.valueOf() - b.start.valueOf()), [current?.schedules]);
+  const invalidCount = (current?.schedules?.length ?? 0) - rows.length;
   const days = useMemo(() => { const found = [...new Set(rows.map(item => item.start.day()))].sort((a, b) => a - b); return found.length ? found : [1, 3, 5]; }, [rows]);
   const students = useMemo(() => [...new Set(rows.map(item => item.studentId))].sort((a, b) => a - b), [rows]);
   function openRegistration() { onRegisterChange(true); }
@@ -37,6 +38,7 @@ export function ScheduleManagement({ classId, registration, onRegisterChange, st
   }
   async function createSchedule() {
     if (!session || !classId) return Alert.alert('로그인과 수업 정보가 필요해요.');
+    if (session.user.role !== 'TEACHER') return Alert.alert('선생님만 일정을 등록할 수 있어요.');
     if (!studentId) return Alert.alert('학생을 선택해주세요.');
     const startDate = parseServerDate(`${date} ${start}:00`);
     const endDate = parseServerDate(`${date} ${end}:00`);
@@ -49,7 +51,7 @@ export function ScheduleManagement({ classId, registration, onRegisterChange, st
     finally { setBusy(false); }
   }
   const status = !session ? '로그인이 필요해요.' : !classId ? '수업 정보가 필요해요.' : !current ? '일정을 불러오는 중이에요.' : current.error || '등록된 일정이 없어요.';
-  return <View style={styles.content}>{registration ? <>
+  return <View style={styles.content}>{invalidCount > 0 && <Text style={styles.warning}>날짜 형식이 올바르지 않은 일정 {invalidCount}개를 표시하지 못했어요.</Text>}{registration ? <>
     <Text style={styles.label}>학생</Text><Pressable style={styles.input} onPress={selectStudent}><Image source={require('../../assets/figma/schedule-input.svg')} style={StyleSheet.absoluteFill} contentFit="fill" /><Text style={styles.placeholder}>{availableStudents.find(student => student.id === studentId)?.name ?? '학생 선택'}</Text></Pressable>
     <Modal transparent visible={choosingStudent} animationType="fade" onRequestClose={() => setChoosingStudent(false)}><View style={styles.overlay}><View style={styles.choices}>{availableStudents.map(student => <Pressable key={student.id} onPress={() => { setStudentId(student.id); setChoosingStudent(false); }} style={styles.choice}><Text style={styles.choiceText}>{student.name}</Text></Pressable>)}<Pressable onPress={() => setChoosingStudent(false)} style={styles.choice}><Text style={styles.choiceText}>취소</Text></Pressable></View></View></Modal>
     <Text style={styles.label}>요일</Text><DateTimeField mode="date" value={date} onChange={setDate} />
@@ -63,4 +65,4 @@ export function ScheduleManagement({ classId, registration, onRegisterChange, st
     <Pressable style={styles.open} onPress={openRegistration}><Text style={styles.buttonText}>+ 학생 시간표 등록</Text></Pressable>
   </>}</View>;
 }
-const styles = StyleSheet.create({ content: { paddingHorizontal: 20, paddingTop: 12 }, title: { color: '#151515', fontSize: 14, fontWeight: '700', marginBottom: 18 }, tableHeader: { height: 42, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12 }, headerCell: { flex: 1, fontSize: 12, color: '#777', fontWeight: '700' }, tableRow: { minHeight: 54, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12, paddingVertical: 10 }, cell: { flex: 1, fontSize: 12, color: '#444' }, empty: { borderWidth: 1, borderColor: '#eee', paddingVertical: 20, textAlign: 'center', fontSize: 12, color: '#777' }, open: { marginTop: 28, height: 42, backgroundColor: '#0099ff', alignItems: 'center', justifyContent: 'center' }, buttonText: { color: '#fff', fontSize: 14, fontWeight: '700' }, label: { fontSize: 13, fontWeight: '700', color: '#555', marginTop: 14, marginBottom: 8 }, input: { height: 38, justifyContent: 'center', paddingHorizontal: 14 }, placeholder: { fontSize: 14, color: '#999' }, overlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.3)', justifyContent: 'center', paddingHorizontal: 40 }, choices: { backgroundColor: '#fff', borderRadius: 12, overflow: 'hidden' }, choice: { height: 42, justifyContent: 'center', alignItems: 'center', borderBottomWidth: 1, borderColor: '#eee' }, choiceText: { color: '#151515', fontSize: 14 }, register: { height: 42, marginTop: 16, justifyContent: 'center', alignItems: 'center' }, registrationHeader: { height: 42, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12, marginTop: 26 }, registrationRow: { height: 54, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12 } });
+const styles = StyleSheet.create({ content: { paddingHorizontal: 20, paddingTop: 12 }, warning: { color: '#f04444', fontSize: 12, marginBottom: 10 }, title: { color: '#151515', fontSize: 14, fontWeight: '700', marginBottom: 18 }, tableHeader: { height: 42, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12 }, headerCell: { flex: 1, fontSize: 12, color: '#777', fontWeight: '700' }, tableRow: { minHeight: 54, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12, paddingVertical: 10 }, cell: { flex: 1, fontSize: 12, color: '#444' }, empty: { borderWidth: 1, borderColor: '#eee', paddingVertical: 20, textAlign: 'center', fontSize: 12, color: '#777' }, open: { marginTop: 28, height: 42, backgroundColor: '#0099ff', alignItems: 'center', justifyContent: 'center' }, buttonText: { color: '#fff', fontSize: 14, fontWeight: '700' }, label: { fontSize: 13, fontWeight: '700', color: '#555', marginTop: 14, marginBottom: 8 }, input: { height: 38, justifyContent: 'center', paddingHorizontal: 14 }, placeholder: { fontSize: 14, color: '#999' }, overlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.3)', justifyContent: 'center', paddingHorizontal: 40 }, choices: { backgroundColor: '#fff', borderRadius: 12, overflow: 'hidden' }, choice: { height: 42, justifyContent: 'center', alignItems: 'center', borderBottomWidth: 1, borderColor: '#eee' }, choiceText: { color: '#151515', fontSize: 14 }, register: { height: 42, marginTop: 16, justifyContent: 'center', alignItems: 'center' }, registrationHeader: { height: 42, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12, marginTop: 26 }, registrationRow: { height: 54, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12 } });
