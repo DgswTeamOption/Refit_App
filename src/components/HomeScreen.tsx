@@ -1,6 +1,7 @@
 import { Image } from 'expo-image';
 import * as ImagePicker from 'expo-image-picker';
-import { useEffect, useState } from 'react';
+import { useCallback, useState } from 'react';
+import { useFocusEffect } from 'expo-router';
 import { useSession, type Session } from '../auth/Session';
 import { scheduleDates, studentScheduleDates } from '../services/schedule';
 import { classroomApi } from '../services/classroom';
@@ -23,7 +24,7 @@ export function HomeScreen({ role, classes = [], notifications, notificationActi
   const [banner, setBanner] = useState<ImagePicker.ImagePickerAsset | null>(null);
   const ids = [...new Set(classes.filter(item => item.source === 'server').map(item => item.id).filter(id => Number.isSafeInteger(id) && id > 0))].sort((a, b) => a - b).join(',');
   const monthKey = `${month.getFullYear()}-${month.getMonth() + 1}`;
-  useEffect(() => {
+  useFocusEffect(useCallback(() => {
     if (!session || !ids) return;
     let active = true;
     const [year, monthNumber] = monthKey.split('-').map(Number);
@@ -40,7 +41,7 @@ export function HomeScreen({ role, classes = [], notifications, notificationActi
       if (results.some(result => result.status === 'rejected')) Alert.alert('일정 조회 실패', '일부 수업 일정을 불러오지 못했어요.');
     });
     return () => { active = false; };
-  }, [session, ids, monthKey, role]);
+  }, [session, ids, monthKey, role]));
   const currentDates = calendarResult && calendarResult.session === session && calendarResult.ids === ids && calendarResult.monthKey === monthKey ? calendarResult.dates : {};
   const teacher = role === 'teacher';
   const colors: ClassCalendarColor[] = ['peach', 'purple', 'yellow', 'mint'];

@@ -18,6 +18,7 @@ const http = loadTypeScript('src/services/http.ts', { 'react-native': { Platform
 if (originalApiUrl !== undefined) process.env.EXPO_PUBLIC_API_URL = originalApiUrl;
 const { scheduleApi, parseServerDate, scheduleDates, studentScheduleDates } = loadTypeScript('src/services/schedule.ts', { './http': http });
 const { emailApi } = loadTypeScript('src/services/email.ts', { './http': http });
+const { classroomApi } = loadTypeScript('src/services/classroom.ts', { './http': http });
 const { userApi } = loadTypeScript('src/services/user.ts', { './http': http, 'react-native': { Platform: { OS: 'ios' } } });
 const fakeProfile = { id: 42, name: '민지', role: 'STUDENT', profileImageUrl: null };
 const fakeUserApi = { get: async (id, token) => { assert.equal(id, 42); assert.ok(token); return fakeProfile; } };
@@ -214,4 +215,28 @@ test('only authenticated 401 responses notify the session handler', async () => 
     await assert.rejects(scheduleApi.list(7, 'another-token'), { status: 401 });
     assert.deepEqual(tokens, ['expired-token']);
   } finally { unsubscribe(); global.fetch = originalFetch; }
+});
+
+
+test('classroom endpoints accept direct JSON and empty leave responses', async () => {
+  const originalFetch = global.fetch;
+  const calls = [];
+  global.fetch = async (url, options) => {
+    calls.push({ url, options });
+    if (url.endsWith('/leave')) return new Response(null, { status: 200 });
+    const data = options.method === 'POST' || url.includes('?') ? { id: 7, classroomId: 7, name: '수학', calendar: [] } : [{ id: 7, name: '수학' }];
+    return new Response(JSON.stringify(data), { status: 200 });
+  };
+  try {
+    assert.equal((await classroomApi.list('token'))[0].id, 7);
+    await classroomApi.create('수학', 'token');
+    await classroomApi.join('AB12CD34', 'token');
+    assert.equal((await classroomApi.home(7, 2026, 11, 'token')).name, '수학');
+    assert.equal(await classroomApi.leave(7, 'token'), undefined);
+    assert.equal(calls[0].options.headers.get('Authorization'), 'Bearer token');
+    assert.deepEqual(JSON.parse(calls[1].options.body), { name: '수학' });
+    assert.deepEqual(JSON.parse(calls[2].options.body), { classCode: 'AB12CD34' });
+    assert.equal(calls[3].url, 'http://localhost:8080/api/class/7?year=2026&month=11');
+    assert.equal(calls[4].options.method, 'DELETE');
+  } finally { global.fetch = originalFetch; }
 });

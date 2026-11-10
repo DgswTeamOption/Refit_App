@@ -1,4 +1,5 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useState } from 'react';
+import { useFocusEffect } from 'expo-router';
 import { Alert } from 'react-native';
 import { HomeScreen } from '../components/HomeScreen';
 import type { ClassSummary } from '../components/ClassCards';
@@ -18,7 +19,7 @@ export default function Home() {
   const [result, setResult] = useState<{ token: string; items?: ClassSummary[]; error?: string } | null>(null);
   const [revision, setRevision] = useState(0);
   const token = session?.accessToken;
-  useEffect(() => {
+  useFocusEffect(useCallback(() => {
     if (!token) return;
     let active = true;
     classroomApi.list(token).then(items => {
@@ -26,7 +27,9 @@ export default function Home() {
       if (active) setResult({ token, items: items.map(item => toSummary(item, teacher)) });
     }).catch(error => { if (active) setResult({ token, error: error instanceof Error ? error.message : '수업 목록을 불러오지 못했어요.' }); });
     return () => { active = false; };
-  }, [token, teacher, revision]);
+  // A revision change explicitly refreshes the list after mutations or a retry.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [token, teacher, revision]));
   async function submit(value: string, bannerUri?: string) {
     if (!session) {
       if (teacher) { const item = store.createClass(value, bannerUri); Alert.alert('수업이 만들어졌어요', `수업코드: ${item.code}`); }
@@ -50,6 +53,7 @@ export default function Home() {
       if (teacher) throw new Error('수업 삭제 기능은 준비 중이에요.');
       await classroomApi.leave(item.id, session.accessToken);
       setResult(previous => previous?.token === session.accessToken && previous.items ? { ...previous, items: previous.items.filter(existing => existing.id !== item.id) } : previous);
+      setRevision(value => value + 1);
       return;
     }
     if (teacher) store.deleteClass(item.id);
