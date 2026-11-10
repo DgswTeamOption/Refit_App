@@ -18,3 +18,14 @@ export function attendanceCalendarMarks(requests: StoredRequest[], attendance: S
   });
   return marks;
 }
+
+export function latestAbsenceLabel(requests: StoredRequest[], attendance: StoredAttendance[], student: string, today: string): string {
+  const dates = [
+    ...requests.filter(item => item.student === student && item.kind === 'absence' && item.status === 'approved').map(item => item.date),
+    ...attendance.filter(item => item.student === student && item.status === 'absent').map(item => item.date),
+  ];
+  const latest = dates.filter(date => /^\d{4}-\d{2}-\d{2}$/.test(date) && date <= today).reduce((current, date) => date > current ? date : current, '');
+  if (!latest) return '—';
+  const [, month, day] = latest.split('-').map(Number);
+  return `${month}.${day}`;
+}

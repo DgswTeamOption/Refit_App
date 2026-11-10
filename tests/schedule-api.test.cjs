@@ -158,6 +158,18 @@ test('HTTP status remains available for non-JSON errors', async () => {
   finally { global.fetch = originalFetch; }
 });
 
+test('unexpected JSON error bodies preserve HTTP status and a usable message', async () => {
+  const originalFetch = global.fetch;
+  try {
+    for (const body of ['null', '[]', '"failure"', '{"message":42}']) {
+      global.fetch = async () => new Response(body, { status: 503 });
+      await assert.rejects(scheduleApi.list(7, 'test-token'), error => error instanceof http.ApiError && error.status === 503 && error.message === '요청을 처리하지 못했어요.');
+    }
+    global.fetch = async () => new Response('null', { status: 200 });
+    await assert.rejects(scheduleApi.list(7, 'test-token'), { message: '서버 응답을 읽을 수 없어요.' });
+  } finally { global.fetch = originalFetch; }
+});
+
 test('only authenticated 401 responses notify the session handler', async () => {
   const originalFetch = global.fetch;
   const tokens = [];

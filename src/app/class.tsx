@@ -5,7 +5,7 @@ import type { NoticeActions } from '../components/NoticeScreen';
 import type { StudentRequest, StudentRequestActions } from '../components/StudentRequests';
 import type { TeacherTab } from '../components/TeacherManagement';
 import type { TeacherRow } from '../components/TeacherTable';
-import { attendanceCalendarMarks } from '../services/calendarMarks';
+import { attendanceCalendarMarks, latestAbsenceLabel } from '../services/calendarMarks';
 import { useSession } from '../auth/Session';
 import { useClasses, type RequestKind } from '../store/Classes';
 
@@ -56,7 +56,7 @@ export default function ClassPage() {
       }),
       학생: [...new Set([...members, ...students])].map(student => {
         const a = absences.filter(r => r.student === student);
-        return { id: student, cells: [student, `${makeups.filter(r => r.student === student).length}/${a.length}`, a[a.length - 1]?.date ?? '-'] };
+        return { id: student, cells: [student, `${makeups.filter(r => r.student === student).length}/${a.length}`, latestAbsenceLabel(absences, attendance, student, today)] };
       }),
       결석정보: absences.map(r => ({ id: r.id, cells: [r.student, r.date, r.reason, statusCell(r.status)], actions: r.status === 'pending' ? ['승인' as const, '거절' as const] : undefined })),
       보강: makeups.map(r => ({ id: r.id, cells: [r.student, r.date, statusCell(r.status)], actions: r.status === 'pending' ? ['승인' as const, '거절' as const] : undefined })),
