@@ -1,4 +1,4 @@
-import { jsonBody, requestRaw } from './http';
+import { jsonBody, requestRaw, withRequestTimeout } from './http';
 import { scheduleDates, studentScheduleDates, validateScheduleList, type Schedule } from './schedule';
 
 export type Classroom = { id: number; name: string; classCode: string | null; teacherName: string; createdAt: string };
@@ -8,6 +8,23 @@ export function classroomCalendarDates(home: ClassroomHome | undefined, classId:
   const schedules = validateScheduleList(home.calendar, classId);
   return studentId === undefined ? scheduleDates(schedules) : studentScheduleDates(schedules, studentId);
 }
+export async function loadClassCalendarDates(
+  classIds: number[],
+  load: (id: number) => Promise<string[]>,
+  onUpdate: (result: { dates: Record<number, string[]>; failed: boolean; complete: boolean }) => void,
+): Promise<void> {
+  const dates: Record<number, string[]> = {};
+  let remaining = classIds.length;
+  let failed = false;
+  await Promise.all(classIds.map(async id => {
+    try { dates[id] = await load(id); }
+    catch { failed = true; }
+    finally {
+      remaining -= 1;
+      onUpdate({ dates: { ...dates }, failed, complete: remaining === 0 });
+    }
+  }));
+}
 export class ClassroomTimeoutError extends Error {
   constructor(write: boolean) {
     super(write ? '요청 결과를 확인하지 못했어요. 수업 목록을 확인한 후 다시 시도해주세요.' : '서버 응답이 지연되고 있어요. 잠시 후 다시 시도해주세요.');
@@ -15,15 +32,8 @@ export class ClassroomTimeoutError extends Error {
   }
 }
 export async function classroomRequest<T>(path: string, options: RequestInit, token: string, timeoutMs = 20000): Promise<T | undefined> {
-  const controller = new AbortController();
-  let timedOut = false;
-  const timer = setTimeout(() => { timedOut = true; controller.abort(); }, timeoutMs);
-  try {
-    return await requestRaw<T>(path, { ...options, signal: controller.signal }, token);
-  } catch (error) {
-    if (timedOut) throw new ClassroomTimeoutError(!!options.method && options.method !== 'GET');
-    throw error;
-  } finally { clearTimeout(timer); }
+  return withRequestTimeout(signal => requestRaw<T>(path, { ...options, signal }, token), timeoutMs,
+    () => new ClassroomTimeoutError(!!options.method && options.method !== 'GET'));
 }
 export const classroomApi = {
   list: (token: string) => classroomRequest<Classroom[]>('/api/class', {}, token),

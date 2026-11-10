@@ -2,7 +2,7 @@ import { Image } from 'expo-image';
 import { useRef, useState } from 'react';
 import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSession } from '../auth/Session';
-import { notificationApi, validateNotificationPage } from '../services/notification';
+import { mergeNotificationItems, notificationApi, validateNotificationPage } from '../services/notification';
 
 export type NotificationItem = { id: string; title: string; body: string; read: boolean };
 export type NotificationActions = { markAllRead?: () => Promise<void>; open?: (id: string) => void };
@@ -23,13 +23,12 @@ export function NotificationBell({ items = [], actions }: { items?: Notification
     const sequence = ++requestNumber.current;
     setBusy(true);
     try {
-      const data = validateNotificationPage(await notificationApi.list(token, page));
+      const data = validateNotificationPage(await notificationApi.list(token, page), page);
       if (sequence !== requestNumber.current) return;
       const next = data.content.map(item => ({ id: String(item.notificationId), title: '알림', body: item.message, read: item.isRead }));
       setResult(previous => {
         const existing = page > 0 && previous?.token === token ? previous.items : [];
-        const ids = new Set(existing.map(item => item.id));
-        return { token, items: [...existing, ...next.filter(item => !ids.has(item.id))], page: data.number, last: data.last };
+        return { token, items: mergeNotificationItems(existing, next), page: data.number, last: data.last };
       });
     } catch (error) {
       if (sequence !== requestNumber.current) return;

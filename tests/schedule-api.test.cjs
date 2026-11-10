@@ -19,9 +19,9 @@ if (originalApiUrl !== undefined) process.env.EXPO_PUBLIC_API_URL = originalApiU
 const schedule = loadTypeScript('src/services/schedule.ts', { './http': http });
 const { scheduleApi, scheduleRequest, parseServerDate, scheduleDates, studentScheduleDates, scheduleAccessibility, validateScheduleList } = schedule;
 const { emailApi } = loadTypeScript('src/services/email.ts', { './http': http });
-const { notificationApi, validateNotificationPage } = loadTypeScript('src/services/notification.ts', { './http': http });
+const { notificationApi, validateNotificationPage, mergeNotificationItems } = loadTypeScript('src/services/notification.ts', { './http': http });
 const { absenceApi, absenceRequest, absenceStatusLabel, isPastAbsenceDate, validateAbsenceList } = loadTypeScript('src/services/absence.ts', { './http': http });
-const { classroomApi, classroomRequest, classroomCalendarDates, ClassroomTimeoutError } = loadTypeScript('src/services/classroom.ts', { './http': http, './schedule': schedule });
+const { classroomApi, classroomRequest, classroomCalendarDates, loadClassCalendarDates, ClassroomTimeoutError } = loadTypeScript('src/services/classroom.ts', { './http': http, './schedule': schedule });
 const { userApi } = loadTypeScript('src/services/user.ts', { './http': http, 'react-native': { Platform: { OS: 'ios' } } });
 const fakeProfile = { id: 42, name: '민지', role: 'STUDENT', profileImageUrl: null };
 const fakeUserApi = { get: async (id, token) => { assert.equal(id, 42); assert.ok(token); return fakeProfile; } };
@@ -64,6 +64,18 @@ test('class calendar validates its class and only shows the student’s schedule
   assert.throws(() => classroomCalendarDates(home, 8));
   assert.throws(() => classroomCalendarDates({ ...home, calendar: null }, 7));
   assert.throws(() => classroomCalendarDates({ ...home, calendar: [{ ...item, classId: 8 }] }, 7));
+});
+
+test('class calendar publishes fast responses without waiting for slower classes', async () => {
+  let finishSlow;
+  const slow = new Promise(resolve => { finishSlow = resolve; });
+  const updates = [];
+  const loading = loadClassCalendarDates([1, 2, 3], id => id === 1 ? slow : id === 2 ? Promise.resolve(['2026-11-10']) : Promise.reject(new Error('offline')), result => updates.push(result));
+  await new Promise(resolve => setImmediate(resolve));
+  assert.deepEqual(updates.at(-1), { dates: { 2: ['2026-11-10'] }, failed: true, complete: false });
+  finishSlow(['2026-11-11']);
+  await loading;
+  assert.deepEqual(updates.at(-1), { dates: { 1: ['2026-11-11'], 2: ['2026-11-10'] }, failed: true, complete: true });
 });
 
 test('schedule timeouts allow retry and identify uncertain writes', async () => {
@@ -339,6 +351,8 @@ test('notification lists reject malformed items and pagination', () => {
   assert.throws(() => validateNotificationPage({ ...page, number: -1 }));
   assert.throws(() => validateNotificationPage({ ...page, content: [{ ...page.content[0], isRead: 'false' }] }));
   assert.throws(() => validateNotificationPage({ ...page, content: [{ ...page.content[0], message: null }] }));
+  assert.throws(() => validateNotificationPage(page, 1));
+  assert.deepEqual(mergeNotificationItems([{ id: '1' }], [{ id: '1' }, { id: '2' }, { id: '2' }]), [{ id: '1' }, { id: '2' }]);
 });
 
 test('notifications use authenticated pagination and server deletion', async () => {

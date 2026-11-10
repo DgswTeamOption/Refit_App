@@ -2,8 +2,8 @@ import { Image } from 'expo-image';
 import * as ImagePicker from 'expo-image-picker';
 import { useCallback, useRef, useState } from 'react';
 import { useFocusEffect } from 'expo-router';
-import { useSession, type Session } from '../auth/Session';
-import { classroomApi, classroomCalendarDates } from '../services/classroom';
+import { useSession } from '../auth/Session';
+import { classroomApi, classroomCalendarDates, loadClassCalendarDates } from '../services/classroom';
 import { Calendar, type CalendarMarks, type ClassCalendarColor } from './Calendar';
 import { NotificationBell, type NotificationActions, type NotificationItem } from './NotificationBell';
 import { ClassCards, type ClassSummary } from './ClassCards';
@@ -16,7 +16,7 @@ type Role = 'student' | 'teacher';
 export function HomeScreen({ role, classes = [], notifications, notificationActions, onSubmitClass, onRemoveClass, listStatus, listError, onRetry }: { role: Role; classes?: ClassSummary[]; notifications?: NotificationItem[]; notificationActions?: NotificationActions; onSubmitClass?: (value: string, bannerUri?: string) => Promise<void> | void; onRemoveClass?: (item: ClassSummary) => Promise<void> | void; listStatus?: string; listError?: string; onRetry?: () => void }) {
   const { session } = useSession();
   const [month, setMonth] = useState(() => { const now = new Date(); return new Date(now.getFullYear(), now.getMonth(), 1); });
-  const [calendarResult, setCalendarResult] = useState<{ session: Session; ids: string; monthKey: string; revision: number; dates: Record<number, string[]>; failed: boolean } | null>(null);
+  const [calendarResult, setCalendarResult] = useState<{ token: string; userId: number; ids: string; monthKey: string; revision: number; dates: Record<number, string[]>; failed: boolean; complete: boolean } | null>(null);
   const [calendarRevision, setCalendarRevision] = useState(0);
   const [modalVisible, setModalVisible] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -25,23 +25,19 @@ export function HomeScreen({ role, classes = [], notifications, notificationActi
   const [banner, setBanner] = useState<ImagePicker.ImagePickerAsset | null>(null);
   const ids = [...new Set(classes.filter(item => item.source === 'server').map(item => item.id).filter(id => Number.isSafeInteger(id) && id > 0))].sort((a, b) => a - b).join(',');
   const monthKey = `${month.getFullYear()}-${month.getMonth() + 1}`;
+  const token = session?.accessToken;
+  const userId = session?.user.id;
   useFocusEffect(useCallback(() => {
-    if (!session || !ids) return;
+    if (!token || !userId || !ids) return;
     let active = true;
     const [year, monthNumber] = monthKey.split('-').map(Number);
     const classIds = ids.split(',').map(Number);
-    Promise.allSettled(classIds.map(async id => classroomCalendarDates(await classroomApi.home(id, year, monthNumber, session.accessToken), id, role === 'student' ? session.user.id : undefined))).then(results => {
-      if (!active) return;
-      const dates: Record<number, string[]> = {};
-      results.forEach((result, index) => {
-        if (result.status !== 'fulfilled') return;
-        dates[classIds[index]] = result.value;
-      });
-      setCalendarResult({ session, ids, monthKey, revision: calendarRevision, dates, failed: results.some(result => result.status === 'rejected') });
-    });
+    void loadClassCalendarDates(classIds,
+      async id => classroomCalendarDates(await classroomApi.home(id, year, monthNumber, token), id, role === 'student' ? userId : undefined),
+      result => { if (active) setCalendarResult({ token, userId, ids, monthKey, revision: calendarRevision, ...result }); });
     return () => { active = false; };
-  }, [session, ids, monthKey, role, calendarRevision]));
-  const currentCalendar = calendarResult && calendarResult.session === session && calendarResult.ids === ids && calendarResult.monthKey === monthKey ? calendarResult : null;
+  }, [token, userId, ids, monthKey, role, calendarRevision]));
+  const currentCalendar = calendarResult && calendarResult.token === token && calendarResult.userId === userId && calendarResult.ids === ids && calendarResult.monthKey === monthKey ? calendarResult : null;
   const currentDates = currentCalendar?.dates ?? {};
   const teacher = role === 'teacher';
   const colors: ClassCalendarColor[] = ['peach', 'purple', 'yellow', 'mint'];
@@ -79,7 +75,7 @@ export function HomeScreen({ role, classes = [], notifications, notificationActi
     </View>
     <ScrollView contentContainerStyle={styles.content}>
       <Calendar marks={calendarMarks} classLegend={classLegend} month={month} onMonthChange={setMonth} />
-      {currentCalendar?.failed && <View style={styles.listError}><Text style={styles.listErrorText}>일부 수업 일정을 불러오지 못했어요.</Text><Pressable accessibilityRole="button" accessibilityLabel="수업 일정 다시 불러오기" disabled={currentCalendar.revision !== calendarRevision} onPress={() => setCalendarRevision(value => value + 1)}><Text style={styles.listRetry}>{currentCalendar.revision !== calendarRevision ? '불러오는 중' : '다시 시도'}</Text></Pressable></View>}
+      {currentCalendar?.failed && currentCalendar.complete && <View style={styles.listError}><Text style={styles.listErrorText}>일부 수업 일정을 불러오지 못했어요.</Text><Pressable accessibilityRole="button" accessibilityLabel="수업 일정 다시 불러오기" disabled={currentCalendar.revision !== calendarRevision} onPress={() => setCalendarRevision(value => value + 1)}><Text style={styles.listRetry}>{currentCalendar.revision !== calendarRevision ? '불러오는 중' : '다시 시도'}</Text></Pressable></View>}
       <View style={styles.sectionHeader}><Text style={styles.sectionTitle}>내 수업</Text><Pressable accessibilityRole="button" onPress={showModal}><Text style={styles.add}>+ {action}</Text></Pressable></View>
       {!!listError && <View style={styles.listError}><Text style={styles.listErrorText}>{listError}</Text><Pressable accessibilityRole="button" onPress={onRetry}><Text style={styles.listRetry}>다시 시도</Text></Pressable></View>}
       {listStatus ? <View style={styles.empty}><Text style={styles.emptyText}>{listStatus}</Text>{onRetry && <Pressable accessibilityRole="button" accessibilityLabel="수업 목록 다시 불러오기" onPress={onRetry} style={styles.emptyButton}><Image source={require('../../assets/figma/home-button.svg')} style={StyleSheet.absoluteFill} contentFit="fill" /><Text style={styles.buttonText}>다시 시도</Text></Pressable>}</View> : classes.length ? <ClassCards classes={classes} role={role} onRemove={onRemoveClass} /> : <View style={styles.empty}><Text style={styles.emptyText}>아직 참여한 수업이 없어요</Text><Pressable accessibilityRole="button" onPress={showModal} style={styles.emptyButton}><Image source={require('../../assets/figma/home-button.svg')} style={StyleSheet.absoluteFill} contentFit="fill" /><Text style={styles.buttonText}>{action}</Text></Pressable></View>}
