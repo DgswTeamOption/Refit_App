@@ -1,4 +1,6 @@
-import { createContext, useContext, useMemo, useState, type Dispatch, type ReactNode, type SetStateAction } from 'react';
+import { router } from 'expo-router';
+import { createContext, useContext, useEffect, useMemo, useRef, useState, type Dispatch, type ReactNode, type SetStateAction } from 'react';
+import { onUnauthorized } from '../services/http';
 
 export type Session = { accessToken: string; refreshToken: string; user: { id: number; name: string; role: 'STUDENT' | 'TEACHER' } };
 export type SignupDraft = { name: string; email: string; role: 'STUDENT' | 'TEACHER'; verificationCode: string; expiresAt: number };
@@ -12,6 +14,14 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   const [localUser, setLocalUser] = useState<LocalUser | null>(null);
   const [signupDraft, setSignupDraft] = useState<SignupDraft | null>(null);
   const [pendingGoogleToken, setPendingGoogleToken] = useState<string | null>(null);
+  const currentSession = useRef<Session | null>(null);
+  useEffect(() => { currentSession.current = session; }, [session]);
+  useEffect(() => onUnauthorized(token => {
+    if (currentSession.current?.accessToken !== token) return;
+    currentSession.current = null;
+    setSession(current => current?.accessToken === token ? null : current);
+    router.replace('/');
+  }), []);
   const value = useMemo(() => ({ localUser, setLocalUser, session, setSession, signupDraft, setSignupDraft, pendingGoogleToken, setPendingGoogleToken }), [localUser, session, signupDraft, pendingGoogleToken]);
   return <SessionContext.Provider value={value}>{children}</SessionContext.Provider>;
 }

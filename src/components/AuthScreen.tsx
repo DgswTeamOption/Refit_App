@@ -8,7 +8,6 @@ import { useSession, type Session } from '../auth/Session';
 import { getGoogleIdToken } from '../auth/google';
 import { authApi, emailSession, googleSession, GoogleUserNotRegistered } from '../services/auth';
 import { ApiError } from '../services/http';
-import { useClasses } from '../store/Classes';
 
 type Mode = 'login' | 'signup' | 'role';
 const blue = '#0099ff';
@@ -19,7 +18,6 @@ function Button({ label, variant = 'primary', onPress, disabled = false }: { lab
 
 export function AuthScreen({ mode }: { mode: Mode }) {
   const { signupDraft, setSignupDraft, setLocalUser, setSession, pendingGoogleToken, setPendingGoogleToken } = useSession();
-  const { clear: clearClasses } = useClasses();
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [code, setCode] = useState('');
@@ -50,7 +48,6 @@ export function AuthScreen({ mode }: { mode: Mode }) {
     finally { setBusy(false); }
   }
   function finishLogin(next: Session) {
-    clearClasses();
     setLocalUser(null); setSignupDraft(null); setPendingGoogleToken(null); setSession(next);
     router.replace({ pathname: '/home', params: { role: next.user.role === 'TEACHER' ? 'teacher' : 'student' } });
   }

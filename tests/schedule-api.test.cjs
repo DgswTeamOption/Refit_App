@@ -157,3 +157,18 @@ test('HTTP status remains available for non-JSON errors', async () => {
   try { await assert.rejects(scheduleApi.list(7, 'test-token'), error => error.status === 401); }
   finally { global.fetch = originalFetch; }
 });
+
+test('only authenticated 401 responses notify the session handler', async () => {
+  const originalFetch = global.fetch;
+  const tokens = [];
+  const unsubscribe = http.onUnauthorized(token => tokens.push(token));
+  global.fetch = async () => new Response(JSON.stringify({ status: 401, message: '인증 실패' }), { status: 401 });
+  try {
+    await assert.rejects(emailApi.verifyCode('student@example.com', '123456'), { status: 401 });
+    await assert.rejects(scheduleApi.list(7, 'expired-token'), { status: 401 });
+    assert.deepEqual(tokens, ['expired-token']);
+    unsubscribe();
+    await assert.rejects(scheduleApi.list(7, 'another-token'), { status: 401 });
+    assert.deepEqual(tokens, ['expired-token']);
+  } finally { unsubscribe(); global.fetch = originalFetch; }
+});

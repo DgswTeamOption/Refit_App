@@ -9,6 +9,12 @@ export class ApiError extends Error {
   }
 }
 
+const unauthorizedListeners = new Set<(token: string) => void>();
+export function onUnauthorized(listener: (token: string) => void): () => void {
+  unauthorizedListeners.add(listener);
+  return () => { unauthorizedListeners.delete(listener); };
+}
+
 type Envelope<T> = { success: true; data?: T };
 export async function request<T>(path: string, options: RequestInit = {}, accessToken?: string): Promise<T | undefined> {
   if (!baseUrl) throw new Error('서버 주소가 설정되지 않았어요.');
@@ -16,6 +22,7 @@ export async function request<T>(path: string, options: RequestInit = {}, access
   const headers = new Headers(options.headers);
   if (accessToken) headers.set('Authorization', `Bearer ${accessToken}`);
   const response = await fetch(`${baseUrl}${path}`, { ...options, headers });
+  if (response.status === 401 && accessToken) unauthorizedListeners.forEach(listener => listener(accessToken));
   let body: Envelope<T> | { message?: string };
   try { body = await response.json(); } catch {
     if (!response.ok) throw new ApiError(response.status, '서버 요청에 실패했어요.');
