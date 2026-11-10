@@ -1,6 +1,6 @@
 import { Image } from 'expo-image';
 import { router } from 'expo-router';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Alert, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { emailApi } from '../services/email';
@@ -28,6 +28,7 @@ export function AuthScreen({ mode }: { mode: Mode }) {
   const [role, setRole] = useState<'student' | 'teacher'>(signupDraft?.role === 'TEACHER' ? 'teacher' : 'student');
   const [focused, setFocused] = useState(false);
   const [googleRegistered, setGoogleRegistered] = useState(false);
+  const googleInFlight = useRef(false);
   const remaining = Math.max(0, Math.ceil((expiresAt - now) / 1000));
   useEffect(() => {
     if (!expiresAt) return;
@@ -56,6 +57,8 @@ export function AuthScreen({ mode }: { mode: Mode }) {
     router.replace({ pathname: '/home', params: { role: next.user.role === 'TEACHER' ? 'teacher' : 'student' } });
   }
   async function continueWithGoogle() {
+    if (googleInFlight.current) return;
+    googleInFlight.current = true;
     setPendingGoogleToken(null);
     setBusy(true);
     try {
@@ -67,11 +70,13 @@ export function AuthScreen({ mode }: { mode: Mode }) {
         setSignupDraft(null); setPendingGoogleToken(idToken); router.push('/role');
       }
     } catch (error) { Alert.alert('Google 로그인 실패', error instanceof Error ? error.message : '다시 시도해주세요.'); }
-    finally { setBusy(false); }
+    finally { googleInFlight.current = false; setBusy(false); }
   }
   async function submit() {
     if (mode === 'role') {
       if (pendingGoogleToken) {
+        if (googleInFlight.current) return;
+        googleInFlight.current = true;
         setBusy(true);
         try {
           if (!googleRegistered) {
@@ -89,7 +94,7 @@ export function AuthScreen({ mode }: { mode: Mode }) {
           }
           finishLogin(await googleSession(pendingGoogleToken));
         } catch (error) { Alert.alert('Google 회원가입 실패', error instanceof Error && error.message ? error.message : '다시 시도해주세요.'); }
-        finally { setBusy(false); }
+        finally { googleInFlight.current = false; setBusy(false); }
         return;
       }
       if (!signupDraft) return Alert.alert('회원가입 정보를 먼저 입력해주세요.');
