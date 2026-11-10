@@ -102,7 +102,7 @@ function ProfileBody({ page, notifications, notificationActions }: ProfileProps)
   }
   const photo = profile?.profileImageUrl;
   const imageUri = photo && (photo.startsWith('/') ? `${baseUrl}${photo}` : photo);
-  const heading = page === 'view' ? '내 정보' : page === 'edit' ? '정보 수정' : '정말 탈퇴하시겠어요?';
+  const heading = page === 'view' ? '내 정보' : page === 'edit' ? '정보 수정' : '계정 탈퇴';
   return <SafeAreaView edges={['top', 'bottom']} style={styles.safe}>
     <View style={styles.header}><Pressable onPress={() => router.replace({ pathname: '/home', params: { role: (session?.user.role ?? localUser?.role) === 'TEACHER' ? 'teacher' : 'student' } })}><Image source={require('../../assets/figma/logo.svg')} style={styles.logo} contentFit="contain" accessibilityLabel="홈" /></Pressable><View style={styles.headerRight}><NotificationBell items={notifications} actions={notificationActions} /><ProfileAvatar /></View></View>
     <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
@@ -123,7 +123,7 @@ function ProfileBody({ page, notifications, notificationActions }: ProfileProps)
         <Text style={styles.deleteTitle}>정말 탈퇴하시겠어요?</Text><Text style={styles.deleteDescription}>탈퇴하면 계정과 프로필 정보가 삭제됩니다.</Text>
         <Text style={styles.label}>이메일 인증코드</Text><TextInput accessibilityLabel="이메일 인증코드" value={code} onChangeText={setCode} keyboardType="number-pad" maxLength={6} placeholder="인증코드 입력" placeholderTextColor="#999" style={styles.input} />
         <Text style={styles.label}>확인을 위해 “계정 삭제”를 입력해주세요</Text><TextInput accessibilityLabel="계정 삭제 확인" value={confirmation} onChangeText={setConfirmation} placeholder="계정 삭제" placeholderTextColor="#999" style={styles.input} />
-        <Pressable disabled={busy} onPress={removeAccount} style={[styles.primaryButton, styles.deleteButton]}><Text style={styles.buttonText}>정말 탈퇴하시겠어요?</Text></Pressable><Pressable onPress={() => router.back()}><Text style={styles.cancel}>취소</Text></Pressable>
+        <Pressable disabled={busy} onPress={removeAccount} style={[styles.primaryButton, styles.deleteButton]}><Text style={styles.buttonText}>탈퇴하기</Text></Pressable><Pressable onPress={() => router.back()}><Text style={styles.cancel}>취소</Text></Pressable>
       </>}
     </ScrollView>
   </SafeAreaView>;
