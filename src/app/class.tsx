@@ -1,6 +1,6 @@
-import { useLocalSearchParams } from 'expo-router';
+import { useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { Alert } from 'react-native';
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { ClassScreen } from '../components/ClassScreen';
 import type { NoticeActions } from '../components/NoticeScreen';
 import type { StudentRequest, StudentRequestActions } from '../components/StudentRequests';
@@ -23,7 +23,7 @@ export default function ClassPage() {
   const token = session?.accessToken;
   const [absenceRevision, setAbsenceRevision] = useState(0);
   const [absenceResult, setAbsenceResult] = useState<{ token: string; id: number; teacher: boolean; revision: number; items?: AbsenceListItem[]; error?: string } | null>(null);
-  useEffect(() => {
+  useFocusEffect(useCallback(() => {
     if (source !== 'server' || !id || !token) return;
     let active = true;
     const load = teacher ? absenceApi.listClass : absenceApi.listMine;
@@ -32,7 +32,7 @@ export default function ClassPage() {
       if (active) setAbsenceResult({ token, id, teacher, revision: absenceRevision, items });
     }).catch(error => { if (active) setAbsenceResult({ token, id, teacher, revision: absenceRevision, error: error instanceof Error ? error.message : '결석 신청 내역을 불러오지 못했어요.' }); });
     return () => { active = false; };
-  }, [source, id, token, teacher, absenceRevision]);
+  }, [source, id, token, teacher, absenceRevision]));
   const currentAbsences = absenceResult && absenceResult.token === token && absenceResult.id === id && absenceResult.teacher === teacher && absenceResult.revision === absenceRevision ? absenceResult : null;
   const absenceStatus = source === 'server' ? currentAbsences?.error ?? (!currentAbsences ? '결석 신청 내역을 불러오는 중이에요.' : undefined) : undefined;
   const [serverHome, setServerHome] = useState<{ token: string; id: number; name?: string; error?: string } | null>(null);
@@ -132,7 +132,7 @@ export default function ClassPage() {
   return <ClassScreen
     role={teacher ? 'teacher' : 'student'} name={currentHome?.name || name || '수업'} classId={id} loadError={currentHome?.error}
     notices={localId === undefined ? [] : store.noticesOf(localId)} noticeActions={noticeActions}
-    studentRequests={studentRequests} requestActions={requestActions} teacherRows={source === 'server' ? serverTeacherRows : teacherRows} serverDataUnavailable={localId === undefined} absenceStatus={absenceStatus} onRetryAbsences={currentAbsences?.error ? () => setAbsenceRevision(value => value + 1) : undefined}
+    studentRequests={studentRequests} requestActions={requestActions} teacherRows={source === 'server' ? serverTeacherRows : teacherRows} serverDataUnavailable={localId === undefined} absenceStatus={absenceStatus} onRefreshAbsences={source === 'server' ? () => setAbsenceRevision(value => value + 1) : undefined} onRetryAbsences={currentAbsences?.error ? () => setAbsenceRevision(value => value + 1) : undefined}
     onTeacherAction={localId === undefined ? (source === 'server' && teacher && token ? async (tab, rowId, action) => {
       if (tab !== '결석정보' || (action !== '승인' && action !== '거절')) throw new Error('해당 기능은 준비 중이에요.');
       const absenceId = Number(rowId);

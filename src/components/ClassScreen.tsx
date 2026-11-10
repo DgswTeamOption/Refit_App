@@ -25,6 +25,7 @@ type ClassScreenProps = {
   onTeacherAction?: (tab: TeacherTab, rowId: string, action: TeacherActionLabel) => Promise<void> | void;
   absenceStatus?: string;
   onRetryAbsences?: () => void;
+  onRefreshAbsences?: () => void;
   studentRequests?: Partial<Record<'absence' | 'makeup', StudentRequest[]>>;
   serverDataUnavailable?: boolean;
   requestActions?: Partial<Record<'absence' | 'makeup', StudentRequestActions>>;
@@ -40,7 +41,7 @@ type ClassScreenProps = {
   localSchedules?: Schedule[];
   onCreateLocalSchedule?: (input: ScheduleInput) => void;
 };
-export function ClassScreen({ role, name, classId, loadError, notices = [], noticeActions, teacherRows, onTeacherAction, studentRequests, requestActions, serverDataUnavailable, absenceStatus, onRetryAbsences, notifications, notificationActions, calendarMarks, scheduleStudents, availability, onSaveAvailability, attendanceRows, attendanceSummary, onNfc, localSchedules, onCreateLocalSchedule }: ClassScreenProps) {
+export function ClassScreen({ role, name, classId, loadError, notices = [], noticeActions, teacherRows, onTeacherAction, studentRequests, requestActions, serverDataUnavailable, absenceStatus, onRetryAbsences, onRefreshAbsences, notifications, notificationActions, calendarMarks, scheduleStudents, availability, onSaveAvailability, attendanceRows, attendanceSummary, onNfc, localSchedules, onCreateLocalSchedule }: ClassScreenProps) {
   const [tab, setTab] = useState('메인');
   const [registering, setRegistering] = useState(false);
   const [addingAvailability, setAddingAvailability] = useState(false);
@@ -58,6 +59,7 @@ export function ClassScreen({ role, name, classId, loadError, notices = [], noti
     finally { setNfcBusy(false); }
   }
   function selectTab(next: string) {
+    if (next !== tab && (next === '결석 일정' || next === '결석정보')) onRefreshAbsences?.();
     setNotice(null); setRegistering(false); setAddingAvailability(false); setRequestForm(false);
     if (next === '메인' || teacher || next === '결석 일정' || next === '보강 일정' || next === '출석') setTab(next);
     else Alert.alert('준비 중', `${next} 화면은 준비 중이에요.`);
