@@ -16,6 +16,7 @@ export function ScheduleManagement({ classId, registration, onRegisterChange, st
   const [date, setDate] = useState('');
   const [start, setStart] = useState('');
   const [end, setEnd] = useState('');
+  const selectedDate = parseServerDate(`${date} 00:00:00`);
   const [busy, setBusy] = useState(false);
   const [revision, setRevision] = useState(0);
   const localMode = localSchedules !== undefined;
@@ -64,7 +65,7 @@ export function ScheduleManagement({ classId, registration, onRegisterChange, st
   return <View style={styles.content}>{invalidCount > 0 && <Text style={styles.warning}>날짜 형식이 올바르지 않은 일정 {invalidCount}개를 표시하지 못했어요.</Text>}{registration ? <>
     <Text style={styles.label}>학생</Text><Pressable style={styles.input} onPress={selectStudent}><Image source={require('../../assets/figma/schedule-input.svg')} style={StyleSheet.absoluteFill} contentFit="fill" /><Text style={styles.placeholder}>{availableStudents.find(student => student.id === studentId)?.name ?? '학생 선택'}</Text></Pressable>
     <Modal transparent visible={choosingStudent} animationType="fade" onRequestClose={() => setChoosingStudent(false)}><View style={styles.overlay}><View style={styles.choices}>{availableStudents.map(student => <Pressable key={student.id} onPress={() => { setStudentId(student.id); setChoosingStudent(false); }} style={styles.choice}><Text style={styles.choiceText}>{student.name}</Text></Pressable>)}<Pressable onPress={() => setChoosingStudent(false)} style={styles.choice}><Text style={styles.choiceText}>취소</Text></Pressable></View></View></Modal>
-    <Text style={styles.label}>요일</Text><DateTimeField mode="date" value={date} onChange={setDate} />
+    <Text style={styles.label}>요일</Text><DateTimeField mode="date" value={date} onChange={setDate} placeholder="요일 선택" displayValue={selectedDate.isValid() ? `${weekdays[selectedDate.day()]}요일` : undefined} />
     <Text style={styles.label}>수업 시간</Text><TimeRangeField start={start} end={end} onChange={(nextStart, nextEnd) => { setStart(nextStart); setEnd(nextEnd); }} />
     <Pressable disabled={busy} style={styles.register} onPress={createSchedule}><Image source={require('../../assets/figma/apply-button.svg')} style={StyleSheet.absoluteFill} contentFit="fill" /><Text style={styles.buttonText}>등록</Text></Pressable>
     <View style={styles.registrationHeader}><Image source={require('../../assets/figma/schedule-header.svg')} style={StyleSheet.absoluteFill} contentFit="fill" /><Text style={styles.headerCell}>학생</Text><Text style={styles.headerCell}>요일/시간</Text></View>
