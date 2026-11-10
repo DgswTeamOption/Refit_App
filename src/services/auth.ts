@@ -6,11 +6,26 @@ import { userApi } from './user';
 type TokenResponse = { accessToken: string; refreshToken: string };
 type AccessClaims = { userId?: unknown; role?: unknown };
 export class GoogleUserNotRegistered extends Error {}
+async function googleRequest<T>(path: string, idToken: string, body: unknown): Promise<T | undefined> {
+  try { return await request<T>(path, { method: 'POST', ...jsonBody(body) }); }
+  catch (error) {
+    if (error instanceof ApiError && error.status === 401) {
+      let audience = '';
+      try {
+        const claim = jwtDecode<{ aud?: unknown }>(idToken).aud;
+        if (typeof claim === 'string') audience = claim;
+        else if (Array.isArray(claim) && claim.every(value => typeof value === 'string')) audience = claim.join(', ');
+      } catch { /* A malformed ID token may not have readable claims. */ }
+      throw new ApiError(error.status, audience ? `${error.message}\nGoogle 클라이언트 ID(aud): ${audience}` : error.message);
+    }
+    throw error;
+  }
+}
 export const authApi = {
   registerEmail: (email: string, name: string, role: Session['user']['role'], verificationCode: string) => request<unknown>('/api/auth/register', { method: 'POST', ...jsonBody({ email_id: email, name, role, verificationToken: verificationCode }) }),
   loginEmail: (email: string, verificationCode: string) => request<TokenResponse>('/api/auth/login', { method: 'POST', ...jsonBody({ email_id: email, verificationToken: verificationCode }) }),
-  registerGoogle: (idToken: string, role: Session['user']['role']) => request<unknown>('/api/auth/google/register', { method: 'POST', ...jsonBody({ idToken, role }) }),
-  loginGoogle: (idToken: string) => request<TokenResponse>('/api/auth/google/login', { method: 'POST', ...jsonBody({ idToken }) }),
+  registerGoogle: (idToken: string, role: Session['user']['role']) => googleRequest<unknown>('/api/auth/google/register', idToken, { idToken, role }),
+  loginGoogle: (idToken: string) => googleRequest<TokenResponse>('/api/auth/google/login', idToken, { idToken }),
 };
 
 async function sessionFromTokens(tokens: TokenResponse | undefined): Promise<Session> {

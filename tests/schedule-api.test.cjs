@@ -134,6 +134,18 @@ test('only a Google login 404 is treated as an unregistered user', async () => {
   finally { global.fetch = originalFetch; }
 });
 
+test('Google 401 exposes the audience and server message without the ID token', async () => {
+  const originalFetch = global.fetch;
+  const token = `e30.${Buffer.from(JSON.stringify({ aud: 'client.apps.googleusercontent.com' })).toString('base64url')}.signature`;
+  global.fetch = async () => new Response(JSON.stringify({ status: 401, message: '유효하지 않은 Google 인증 정보' }), { status: 401 });
+  try {
+    for (const action of [() => authApi.loginGoogle(token), () => authApi.registerGoogle(token, 'STUDENT')]) {
+      await assert.rejects(action(), error => error instanceof http.ApiError && error.status === 401 && error.message.includes('유효하지 않은 Google 인증 정보') && error.message.includes('client.apps.googleusercontent.com') && !error.message.includes(token));
+    }
+    await assert.rejects(authApi.loginGoogle('invalid'), error => error instanceof http.ApiError && error.message === '유효하지 않은 Google 인증 정보');
+  } finally { global.fetch = originalFetch; }
+});
+
 test('a missing profile does not start Google registration', async () => {
   const originalFetch = global.fetch;
   const accessToken = `e30.${Buffer.from(JSON.stringify({ userId: 42, role: 'STUDENT' })).toString('base64url')}.signature`;
