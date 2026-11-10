@@ -12,7 +12,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 type Role = 'student' | 'teacher';
 
-export function HomeScreen({ role, classes = [], notifications, notificationActions, onSubmitClass, onRemoveClass }: { role: Role; classes?: ClassSummary[]; notifications?: NotificationItem[]; notificationActions?: NotificationActions; onSubmitClass?: (value: string, bannerUri?: string) => void; onRemoveClass?: (id: number) => void }) {
+export function HomeScreen({ role, classes = [], notifications, notificationActions, onSubmitClass, onRemoveClass }: { role: Role; classes?: ClassSummary[]; notifications?: NotificationItem[]; notificationActions?: NotificationActions; onSubmitClass?: (value: string, bannerUri?: string) => void; onRemoveClass?: (item: ClassSummary) => void }) {
   const { session } = useSession();
   const initial = useInitial();
   const [month, setMonth] = useState(() => { const now = new Date(); return new Date(now.getFullYear(), now.getMonth(), 1); });
