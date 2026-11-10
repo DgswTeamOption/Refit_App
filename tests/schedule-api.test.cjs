@@ -17,7 +17,7 @@ delete process.env.EXPO_PUBLIC_API_URL;
 const http = loadTypeScript('src/services/http.ts', { 'react-native': { Platform: { OS: 'ios' } } });
 if (originalApiUrl !== undefined) process.env.EXPO_PUBLIC_API_URL = originalApiUrl;
 const schedule = loadTypeScript('src/services/schedule.ts', { './http': http });
-const { scheduleApi, scheduleRequest, parseServerDate, scheduleDates, studentScheduleDates, scheduleAccessibility, validateScheduleList } = schedule;
+const { scheduleApi, scheduleRequest, parseServerDate, scheduleDates, studentScheduleDates, scheduleAccessibility, validateScheduleList, groupSchedulesByStudentAndDay } = schedule;
 const { emailApi } = loadTypeScript('src/services/email.ts', { './http': http });
 const { notificationApi, validateNotificationPage, mergeNotificationItems } = loadTypeScript('src/services/notification.ts', { './http': http });
 const { absenceApi, absenceRequest, absenceStatusLabel, isPastAbsenceDate, validateAbsenceList } = loadTypeScript('src/services/absence.ts', { './http': http });
@@ -45,6 +45,20 @@ test('student calendar includes only the selected student’s schedules', () => 
   ];
   assert.deepEqual(studentScheduleDates(schedules, 1), ['2026-08-01']);
   assert.deepEqual(studentScheduleDates(schedules, undefined), []);
+});
+
+test('schedule table groups each student and weekday without losing multiple lessons', () => {
+  const rows = [
+    { studentId: 1, start: parseServerDate('2026-11-09 09:00:00'), id: 1 },
+    { studentId: 1, start: parseServerDate('2026-11-09 13:00:00'), id: 2 },
+    { studentId: 1, start: parseServerDate('2026-11-10 09:00:00'), id: 3 },
+    { studentId: 2, start: parseServerDate('2026-11-09 09:00:00'), id: 4 },
+  ];
+  const cells = groupSchedulesByStudentAndDay(rows);
+  assert.deepEqual(cells.get(1).get(1).map(row => row.id), [1, 2]);
+  assert.deepEqual(cells.get(1).get(2).map(row => row.id), [3]);
+  assert.deepEqual(cells.get(2).get(1).map(row => row.id), [4]);
+  assert.equal(cells.get(2).get(2), undefined);
 });
 
 test('schedule lists reject malformed responses and schedules from another class', () => {

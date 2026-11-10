@@ -2,7 +2,7 @@ import { Image } from 'expo-image';
 import { useEffect, useMemo, useState } from 'react';
 import { Alert, Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSession, type Session } from '../auth/Session';
-import { parseServerDate, scheduleAccessibility, scheduleApi, validateScheduleList, type Schedule, type ScheduleInput } from '../services/schedule';
+import { groupSchedulesByStudentAndDay, parseServerDate, scheduleAccessibility, scheduleApi, validateScheduleList, type Schedule, type ScheduleInput } from '../services/schedule';
 import { DateTimeField } from './DateTimeField';
 import { TimeRangeField } from './TimeRangeField';
 
@@ -35,6 +35,7 @@ export function ScheduleManagement({ classId, registration, onRegisterChange, st
   const invalidCount = (schedules?.length ?? 0) - rows.length;
   const days = useMemo(() => { const found = [...new Set(rows.map(item => item.start.day()))].sort((a, b) => a - b); return found.length ? found : [1, 3, 5]; }, [rows]);
   const students = useMemo(() => [...new Set(rows.map(item => item.studentId))].sort((a, b) => a - b), [rows]);
+  const scheduleCells = useMemo(() => groupSchedulesByStudentAndDay(rows), [rows]);
   function openRegistration() { setStudentId(null); setDate(''); setStart(''); setEnd(''); onRegisterChange(true); }
   function selectStudent() {
     if (!availableStudents.length) return localMode
@@ -72,7 +73,7 @@ export function ScheduleManagement({ classId, registration, onRegisterChange, st
     {rows.length ? rows.map(item => <View key={item.scheduleId} style={styles.registrationRow}><Image source={require('../../assets/figma/schedule-row.svg')} style={StyleSheet.absoluteFill} contentFit="fill" /><Text style={styles.cell}>{nameOf(item.studentId)}</Text><Pressable accessibilityRole="button" accessibilityLabel={scheduleAccessibility(item.startTime, item.endTime)} onPress={() => Alert.alert('일정 상세', scheduleAccessibility(item.startTime, item.endTime))} style={styles.cell}><Text style={styles.cellText}>{weekdays[item.start.day()]} {item.start.format('HH:mm')}</Text></Pressable></View>) : emptyState}
   </> : <>
     <Text style={styles.title}>요일별 시간표</Text><ScrollView horizontal><View style={{ minWidth: 362, width: Math.max(362, (days.length + 1) * 100) }}><View style={styles.tableHeader}><Image source={require('../../assets/figma/schedule-header.svg')} style={StyleSheet.absoluteFill} contentFit="fill" /><Text style={styles.headerCell}>학생</Text>{days.map(value => <Text key={value} style={styles.headerCell}>{weekdays[value]}</Text>)}</View>
-    {students.length ? students.map(student => <View key={student} style={styles.tableRow}><Image source={require('../../assets/figma/schedule-row.svg')} style={StyleSheet.absoluteFill} contentFit="fill" /><Text style={styles.cell}>{nameOf(student)}</Text>{days.map(value => { const matching = rows.filter(item => item.studentId === student && item.start.day() === value); const details = matching.map(item => scheduleAccessibility(item.startTime, item.endTime)).join('\n'); return <Pressable key={value} accessibilityRole="button" accessibilityLabel={details || '일정 없음'} disabled={!matching.length} onPress={() => Alert.alert('일정 상세', details)} style={styles.cell}><Text style={styles.cellText}>{matching.map(item => item.start.format('HH:mm')).join('\n') || '—'}</Text></Pressable>; })}</View>) : emptyState}</View></ScrollView>
+    {students.length ? students.map(student => <View key={student} style={styles.tableRow}><Image source={require('../../assets/figma/schedule-row.svg')} style={StyleSheet.absoluteFill} contentFit="fill" /><Text style={styles.cell}>{nameOf(student)}</Text>{days.map(value => { const matching = scheduleCells.get(student)?.get(value) ?? []; const details = matching.map(item => scheduleAccessibility(item.startTime, item.endTime)).join('\n'); return <Pressable key={value} accessibilityRole="button" accessibilityLabel={details || '일정 없음'} disabled={!matching.length} onPress={() => Alert.alert('일정 상세', details)} style={styles.cell}><Text style={styles.cellText}>{matching.map(item => item.start.format('HH:mm')).join('\n') || '—'}</Text></Pressable>; })}</View>) : emptyState}</View></ScrollView>
     <Pressable style={styles.open} onPress={openRegistration}><Text style={styles.buttonText}>+ 학생 시간표 등록</Text></Pressable>
   </>}</View>;
 }

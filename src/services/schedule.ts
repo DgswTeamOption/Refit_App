@@ -28,6 +28,18 @@ export function scheduleDates(schedules: Schedule[]): string[] {
 export function studentScheduleDates(schedules: Schedule[], studentId: number | undefined): string[] {
   return studentId === undefined ? [] : scheduleDates(schedules.filter(item => item.studentId === studentId));
 }
+export function groupSchedulesByStudentAndDay<T extends { studentId: number; start: { day: () => number } }>(rows: T[]): Map<number, Map<number, T[]>> {
+  const cells = new Map<number, Map<number, T[]>>();
+  for (const row of rows) {
+    let byDay = cells.get(row.studentId);
+    if (!byDay) { byDay = new Map(); cells.set(row.studentId, byDay); }
+    const weekday = row.start.day();
+    const entries = byDay.get(weekday);
+    if (entries) entries.push(row);
+    else byDay.set(weekday, [row]);
+  }
+  return cells;
+}
 export async function scheduleRequest<T>(path: string, options: RequestInit, token: string, timeoutMs = 20000): Promise<T | undefined> {
   return withRequestTimeout(signal => request<T>(path, { ...options, signal }, token), timeoutMs,
     () => new Error(options.method && options.method !== 'GET'
