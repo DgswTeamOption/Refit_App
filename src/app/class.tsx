@@ -68,10 +68,11 @@ export default function ClassPage() {
     if (localId === undefined) {
       if (!id || !session || teacher) return undefined;
       return { absence: { submit: async ({ date, reason }) => {
-        const result = await absenceApi.create(id, date, reason, session.accessToken);
-        if (!result || !Number.isSafeInteger(result.id)) throw new Error('신청 결과를 확인하지 못했어요.');
-        setAbsenceRevision(value => value + 1);
-        Alert.alert('결석 신청 완료', '결석 신청이 접수됐어요.');
+        try {
+          const result = await absenceApi.create(id, date, reason, session.accessToken);
+          if (!result || !Number.isSafeInteger(result.id)) throw new Error('신청 결과를 확인하지 못했어요. 신청 내역을 확인해주세요.');
+          Alert.alert('결석 신청 완료', '결석 신청이 접수됐어요.');
+        } finally { setAbsenceRevision(value => value + 1); }
       }, cancel: async requestId => {
         const absenceId = Number(requestId);
         if (!Number.isSafeInteger(absenceId) || absenceId <= 0 || !currentAbsences?.items?.some(item => item.id === absenceId && item.student_id === session.user.id && item.class_id === id && item.status === 'PENDING')) throw new Error('대기 중인 결석 신청을 다시 확인해주세요.');

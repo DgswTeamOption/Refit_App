@@ -19,7 +19,7 @@ if (originalApiUrl !== undefined) process.env.EXPO_PUBLIC_API_URL = originalApiU
 const { scheduleApi, parseServerDate, scheduleDates, studentScheduleDates, scheduleAccessibility } = loadTypeScript('src/services/schedule.ts', { './http': http });
 const { emailApi } = loadTypeScript('src/services/email.ts', { './http': http });
 const { notificationApi } = loadTypeScript('src/services/notification.ts', { './http': http });
-const { absenceApi, absenceStatusLabel, isPastAbsenceDate, validateAbsenceList } = loadTypeScript('src/services/absence.ts', { './http': http });
+const { absenceApi, absenceRequest, absenceStatusLabel, isPastAbsenceDate, validateAbsenceList } = loadTypeScript('src/services/absence.ts', { './http': http });
 const { classroomApi, classroomRequest, ClassroomTimeoutError } = loadTypeScript('src/services/classroom.ts', { './http': http });
 const { userApi } = loadTypeScript('src/services/user.ts', { './http': http, 'react-native': { Platform: { OS: 'ios' } } });
 const fakeProfile = { id: 42, name: '민지', role: 'STUDENT', profileImageUrl: null };
@@ -255,6 +255,17 @@ test('classroom requests stop waiting and distinguish unknown write outcomes', a
   } finally { global.fetch = originalFetch; }
 });
 
+
+test('absence timeout distinguishes list loading from an uncertain write', async () => {
+  const originalFetch = global.fetch;
+  global.fetch = (_url, options) => new Promise((_resolve, reject) => {
+    options.signal.addEventListener('abort', () => reject(new Error('aborted')));
+  });
+  try {
+    await assert.rejects(absenceRequest('/api/class/absences/7/me', {}, 'token', 5), /조회가 지연/);
+    await assert.rejects(absenceRequest('/api/class/absences/7', { method: 'POST' }, 'token', 5), /신청 내역을 확인/);
+  } finally { global.fetch = originalFetch; }
+});
 
 test('absence requests use the server date field and authenticated action endpoints', async () => {
   const originalFetch = global.fetch;
