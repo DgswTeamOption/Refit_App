@@ -1,6 +1,6 @@
 import { Image } from 'expo-image';
 import * as ImagePicker from 'expo-image-picker';
-import { useCallback, useState } from 'react';
+import { useCallback, useRef, useState } from 'react';
 import { useFocusEffect } from 'expo-router';
 import { useSession, type Session } from '../auth/Session';
 import { scheduleDates, studentScheduleDates } from '../services/schedule';
@@ -20,6 +20,7 @@ export function HomeScreen({ role, classes = [], notifications, notificationActi
   const [calendarResult, setCalendarResult] = useState<{ session: Session; ids: string; monthKey: string; dates: Record<number, string[]> } | null>(null);
   const [modalVisible, setModalVisible] = useState(false);
   const [busy, setBusy] = useState(false);
+  const submitting = useRef(false);
   const [value, setValue] = useState('');
   const [banner, setBanner] = useState<ImagePicker.ImagePickerAsset | null>(null);
   const ids = [...new Set(classes.filter(item => item.source === 'server').map(item => item.id).filter(id => Number.isSafeInteger(id) && id > 0))].sort((a, b) => a - b).join(',');
@@ -56,12 +57,14 @@ export function HomeScreen({ role, classes = [], notifications, notificationActi
   const action = teacher ? '수업 만들기' : '수업 참여하기';
   function showModal() { setValue(''); setBanner(null); setModalVisible(true); }
   async function submitClass() {
+    if (submitting.current) return;
     if (!value.trim()) return Alert.alert(teacher ? '수업 제목을 입력해주세요.' : '수업코드를 입력해주세요.');
     if (!onSubmitClass) return Alert.alert('준비 중', `${action} 기능은 준비 중이에요.`);
+    submitting.current = true;
     setBusy(true);
     try { await onSubmitClass(value.trim(), banner?.uri); setModalVisible(false); }
     catch (e) { Alert.alert(`${action} 실패`, e instanceof Error ? e.message : '다시 시도해주세요.'); }
-    finally { setBusy(false); }
+    finally { submitting.current = false; setBusy(false); }
   }
   async function selectBanner() {
     try {
@@ -77,12 +80,12 @@ export function HomeScreen({ role, classes = [], notifications, notificationActi
     <ScrollView contentContainerStyle={styles.content}>
       <Calendar marks={calendarMarks} classLegend={classLegend} month={month} onMonthChange={setMonth} />
       <View style={styles.sectionHeader}><Text style={styles.sectionTitle}>내 수업</Text><Pressable accessibilityRole="button" onPress={showModal}><Text style={styles.add}>+ {action}</Text></Pressable></View>
-      {listStatus ? <Pressable onPress={onRetry} disabled={!onRetry} style={styles.empty}><Text style={styles.emptyText}>{listStatus}</Text></Pressable> : classes.length ? <ClassCards classes={classes} role={role} onRemove={onRemoveClass} /> : <View style={styles.empty}><Text style={styles.emptyText}>아직 참여한 수업이 없어요</Text><Pressable accessibilityRole="button" onPress={showModal} style={styles.emptyButton}><Image source={require('../../assets/figma/home-button.svg')} style={StyleSheet.absoluteFill} contentFit="fill" /><Text style={styles.buttonText}>{action}</Text></Pressable></View>}
+      {listStatus ? <View style={styles.empty}><Text style={styles.emptyText}>{listStatus}</Text>{onRetry && <Pressable accessibilityRole="button" accessibilityLabel="수업 목록 다시 불러오기" onPress={onRetry} style={styles.emptyButton}><Image source={require('../../assets/figma/home-button.svg')} style={StyleSheet.absoluteFill} contentFit="fill" /><Text style={styles.buttonText}>다시 시도</Text></Pressable>}</View> : classes.length ? <ClassCards classes={classes} role={role} onRemove={onRemoveClass} /> : <View style={styles.empty}><Text style={styles.emptyText}>아직 참여한 수업이 없어요</Text><Pressable accessibilityRole="button" onPress={showModal} style={styles.emptyButton}><Image source={require('../../assets/figma/home-button.svg')} style={StyleSheet.absoluteFill} contentFit="fill" /><Text style={styles.buttonText}>{action}</Text></Pressable></View>}
     </ScrollView>
-    <Modal transparent visible={modalVisible} animationType="fade" onRequestClose={() => setModalVisible(false)}><View style={styles.overlay}><View style={styles.modal}>
+    <Modal transparent visible={modalVisible} animationType="fade" onRequestClose={() => { if (!submitting.current) setModalVisible(false); }}><View style={styles.overlay}><View style={styles.modal}>
       <Text style={styles.modalTitle}>{action}</Text>
-      {teacher ? <><Text style={styles.label}>수업 제목 *</Text><TextInput accessibilityLabel="수업 제목" value={value} onChangeText={setValue} placeholder="수업 제목을 입력해주세요" placeholderTextColor="#aaa" style={styles.input} /><Text style={styles.label}>배너 사진</Text><Pressable accessibilityLabel="배너 사진 선택" style={styles.photo} onPress={selectBanner}>{banner ? <Image source={{ uri: banner.uri }} style={StyleSheet.absoluteFill} contentFit="cover" /> : <Text style={styles.photoText}>사진 선택</Text>}</Pressable></> : <><Text style={styles.modalDescription}>수업코드를 입력해주세요.</Text><TextInput accessibilityLabel="수업 코드" autoCapitalize="characters" value={value} onChangeText={setValue} placeholder="수업코드를 입력해주세요" placeholderTextColor="#aaa" style={styles.input} /></>}
-      <View style={styles.modalActions}><Pressable onPress={() => setModalVisible(false)} style={[styles.modalButton, styles.cancel]}><Text style={styles.cancelText}>취소</Text></Pressable><Pressable disabled={busy} onPress={submitClass} style={[styles.modalButton, styles.confirm]}><Text style={styles.buttonText}>{teacher ? '만들기' : '참여하기'}</Text></Pressable></View>
+      {teacher ? <><Text style={styles.label}>수업 제목 *</Text><TextInput editable={!busy} accessibilityLabel="수업 제목" value={value} onChangeText={setValue} placeholder="수업 제목을 입력해주세요" placeholderTextColor="#aaa" style={styles.input} /><Text style={styles.label}>배너 사진</Text><Pressable disabled={busy} accessibilityLabel="배너 사진 선택" style={styles.photo} onPress={selectBanner}>{banner ? <Image source={{ uri: banner.uri }} style={StyleSheet.absoluteFill} contentFit="cover" /> : <Text style={styles.photoText}>사진 선택</Text>}</Pressable></> : <><Text style={styles.modalDescription}>수업코드를 입력해주세요.</Text><TextInput editable={!busy} accessibilityLabel="수업 코드" autoCapitalize="characters" value={value} onChangeText={setValue} placeholder="수업코드를 입력해주세요" placeholderTextColor="#aaa" style={styles.input} /></>}
+      <View style={styles.modalActions}><Pressable disabled={busy} onPress={() => setModalVisible(false)} style={[styles.modalButton, styles.cancel]}><Text style={styles.cancelText}>취소</Text></Pressable><Pressable disabled={busy} onPress={submitClass} style={[styles.modalButton, styles.confirm]}><Text style={styles.buttonText}>{teacher ? '만들기' : '참여하기'}</Text></Pressable></View>
     </View></View></Modal>
   </SafeAreaView>;
 }

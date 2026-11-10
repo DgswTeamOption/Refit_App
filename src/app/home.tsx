@@ -4,6 +4,7 @@ import { Alert } from 'react-native';
 import { HomeScreen } from '../components/HomeScreen';
 import type { ClassSummary } from '../components/ClassCards';
 import { classroomApi, type Classroom } from '../services/classroom';
+import { ApiError } from '../services/http';
 import { scheduleDates, studentScheduleDates } from '../services/schedule';
 import { useSession } from '../auth/Session';
 import { useClasses } from '../store/Classes';
@@ -25,7 +26,13 @@ export default function Home() {
     classroomApi.list(token).then(items => {
       if (!Array.isArray(items)) throw new Error('수업 목록을 확인할 수 없어요.');
       if (active) setResult({ token, items: items.map(item => toSummary(item, teacher)) });
-    }).catch(error => { if (active) setResult({ token, error: error instanceof Error ? error.message : '수업 목록을 불러오지 못했어요.' }); });
+    }).catch(error => {
+      if (!active) return;
+      const message = error instanceof ApiError && error.status === 404
+        ? '수업 목록을 찾을 수 없어요. 서버의 수업 API를 확인해주세요.'
+        : error instanceof Error ? error.message : '수업 목록을 불러오지 못했어요.';
+      setResult({ token, error: message });
+    });
     return () => { active = false; };
   // A revision change explicitly refreshes the list after mutations or a retry.
   // eslint-disable-next-line react-hooks/exhaustive-deps
