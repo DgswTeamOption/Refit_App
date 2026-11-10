@@ -25,7 +25,7 @@ const { classroomApi, classroomRequest, classroomCalendarDates, loadClassCalenda
 const { userApi } = loadTypeScript('src/services/user.ts', { './http': http, 'react-native': { Platform: { OS: 'ios' } } });
 const fakeProfile = { id: 42, name: '민지', role: 'STUDENT', profileImageUrl: null };
 const fakeUserApi = { get: async (id, token) => { assert.equal(id, 42); assert.ok(token); return fakeProfile; } };
-const { authApi, emailSession, googleSession, GoogleUserNotRegistered } = loadTypeScript('src/services/auth.ts', { './http': http, './user': { userApi: fakeUserApi } });
+const { authApi, emailSession, googleRequest, googleSession, GoogleUserNotRegistered } = loadTypeScript('src/services/auth.ts', { './http': http, './user': { userApi: fakeUserApi } });
 
 test('server dates are parsed strictly without assuming a timezone', () => {
   assert.equal(parseServerDate('2026-08-27 16:00:00').format('YYYY-MM-DD HH:mm:ss'), '2026-08-27 16:00:00');
@@ -160,6 +160,16 @@ test('Google registration and login use an ID token and obtain the server profil
     assert.deepEqual(JSON.parse(calls[1].options.body), { idToken: 'google-id-token' });
     assert.equal(calls[1].options.headers.has('Authorization'), false);
     assert.deepEqual(session, { accessToken, refreshToken: 'refresh', user: fakeProfile });
+  } finally { global.fetch = originalFetch; }
+});
+
+test('Google server requests time out with a retry message', async () => {
+  const originalFetch = global.fetch;
+  global.fetch = (_url, options) => new Promise((_resolve, reject) => {
+    options.signal.addEventListener('abort', () => reject(new Error('aborted')));
+  });
+  try {
+    await assert.rejects(googleRequest('/api/auth/google/login', 'id-token', { idToken: 'id-token' }, 5), /서버 응답이 지연/);
   } finally { global.fetch = originalFetch; }
 });
 

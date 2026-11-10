@@ -1,14 +1,15 @@
 import { jwtDecode } from 'jwt-decode';
 import type { Session } from '../auth/Session';
-import { ApiError, jsonBody, request } from './http';
+import { ApiError, jsonBody, request, withRequestTimeout } from './http';
 import { userApi } from './user';
 
 type TokenResponse = { accessToken: string; refreshToken: string };
 type AccessClaims = { userId?: unknown; role?: unknown };
 export class GoogleUserNotRegistered extends Error {}
 export class EmailLoginCompletionError extends Error {}
-async function googleRequest<T>(path: string, idToken: string, body: unknown): Promise<T | undefined> {
-  try { return await request<T>(path, { method: 'POST', ...jsonBody(body) }); }
+export async function googleRequest<T>(path: string, idToken: string, body: unknown, timeoutMs = 15000): Promise<T | undefined> {
+  try { return await withRequestTimeout(signal => request<T>(path, { method: 'POST', ...jsonBody(body), signal }), timeoutMs,
+    () => new Error('서버 응답이 지연되고 있어요. 잠시 후 Google 로그인으로 다시 시도해주세요.')); }
   catch (error) {
     if (error instanceof ApiError && error.status === 401) {
       let audience = '';
@@ -29,13 +30,14 @@ export const authApi = {
   loginGoogle: (idToken: string) => googleRequest<TokenResponse>('/api/auth/google/login', idToken, { idToken }),
 };
 
-async function sessionFromTokens(tokens: TokenResponse | undefined): Promise<Session> {
+async function sessionFromTokens(tokens: TokenResponse | undefined, timeoutMs = 15000): Promise<Session> {
   if (!tokens?.accessToken || !tokens.refreshToken) throw new Error('로그인 응답을 확인할 수 없어요.');
   let claims: AccessClaims;
   try { claims = jwtDecode<AccessClaims>(tokens.accessToken); }
   catch { throw new Error('로그인 토큰을 확인할 수 없어요.'); }
   if (typeof claims.userId !== 'number' || !Number.isSafeInteger(claims.userId) || claims.userId <= 0 || (claims.role !== 'STUDENT' && claims.role !== 'TEACHER')) throw new Error('로그인 사용자 정보를 확인할 수 없어요.');
-  const profile = await userApi.get(claims.userId, tokens.accessToken);
+  const profile = await withRequestTimeout(signal => userApi.get(claims.userId as number, tokens.accessToken, signal), timeoutMs,
+    () => new Error('프로필 조회가 지연되고 있어요. 잠시 후 다시 로그인해주세요.'));
   if (!profile || profile.id !== claims.userId || profile.role !== claims.role) throw new Error('프로필 정보를 확인할 수 없어요.');
   return { ...tokens, user: { id: profile.id, name: profile.name, role: profile.role, profileImageUrl: profile.profileImageUrl ?? null } };
 }

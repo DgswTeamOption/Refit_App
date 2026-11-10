@@ -31,7 +31,11 @@ export function AuthScreen({ mode }: { mode: Mode }) {
   const remaining = Math.max(0, Math.ceil((expiresAt - now) / 1000));
   useEffect(() => {
     if (!expiresAt) return;
-    const timer = setInterval(() => setNow(Date.now()), 1000);
+    const timer = setInterval(() => {
+      const current = Date.now();
+      setNow(current);
+      if (current >= expiresAt) clearInterval(timer);
+    }, 1000);
     return () => clearInterval(timer);
   }, [expiresAt]);
   const sent = !!sentEmail && sentEmail === email.trim();
@@ -101,7 +105,7 @@ export function AuthScreen({ mode }: { mode: Mode }) {
       return;
     }
     if (mode === 'signup' && (!name.trim() || name.trim().length > 50)) return Alert.alert('이름은 1~50자로 입력해주세요.');
-    if (!sent || remaining === 0 || !/^\d{6}$/.test(code)) return Alert.alert('유효한 인증코드 6자리를 입력해주세요.');
+    if (!sent || Date.now() >= expiresAt || !/^\d{6}$/.test(code)) return Alert.alert('유효한 인증코드 6자리를 입력해주세요.');
     setBusy(true);
     try {
       if (mode === 'signup') {
