@@ -11,35 +11,36 @@ import { useSession } from '../auth/Session';
 import { useClasses, type RequestKind } from '../store/Classes';
 
 export default function ClassPage() {
-  const { role, name, classId } = useLocalSearchParams<{ role?: string; name?: string; classId?: string }>();
+  const { role, name, classId, source } = useLocalSearchParams<{ role?: string; name?: string; classId?: string; source?: string }>();
   const { session, localUser } = useSession();
   const store = useClasses();
   const teacher = role === 'teacher';
   const id = classId && /^\d+$/.test(classId) && Number(classId) > 0 ? Number(classId) : undefined;
+  const localId = source === 'server' ? undefined : id;
   const author = session?.user.name ?? localUser?.name ?? (teacher ? '선생님' : '학생');
   const { addNotice, updateNotice, removeNotice, addRequest, cancelRequest, addAvailability, updateAvailability, removeAvailability, markAllRead, setRequestStatus, markAttendance, addSchedule } = store;
   const { requestsOf, availabilityOf, membersOf, attendanceOf } = store;
   const today = useMemo(() => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; }, []);
-  const members = useMemo(() => id === undefined ? [] : membersOf(id), [id, membersOf]);
-  const attendance = useMemo(() => id === undefined ? [] : attendanceOf(id), [id, attendanceOf]);
+  const members = useMemo(() => localId === undefined ? [] : membersOf(localId), [localId, membersOf]);
+  const attendance = useMemo(() => localId === undefined ? [] : attendanceOf(localId), [localId, attendanceOf]);
   const statusCell = (status: 'pending' | 'approved' | 'rejected') => status === 'approved' ? { label: '승인', tone: 'blue' as const } : status === 'rejected' ? { label: '거절', tone: 'red' as const } : { label: '대기중', tone: 'neutral' as const };
-  const requests = useMemo(() => id === undefined ? [] : requestsOf(id), [id, requestsOf]);
-  const availability = useMemo(() => id === undefined ? [] : availabilityOf(id), [id, availabilityOf]);
+  const requests = useMemo(() => localId === undefined ? [] : requestsOf(localId), [localId, requestsOf]);
+  const availability = useMemo(() => localId === undefined ? [] : availabilityOf(localId), [localId, availabilityOf]);
 
-  const noticeActions = useMemo<NoticeActions | undefined>(() => id === undefined ? undefined : {
-    create: async input => addNotice(id, input, author),
-    update: async (nid, input) => updateNotice(id, nid, input),
-    remove: async nid => removeNotice(id, nid),
-  }, [id, author, addNotice, updateNotice, removeNotice]);
+  const noticeActions = useMemo<NoticeActions | undefined>(() => localId === undefined ? undefined : {
+    create: async input => addNotice(localId, input, author),
+    update: async (nid, input) => updateNotice(localId, nid, input),
+    remove: async nid => removeNotice(localId, nid),
+  }, [localId, author, addNotice, updateNotice, removeNotice]);
 
   const requestActions = useMemo<Record<RequestKind, StudentRequestActions> | undefined>(() => {
-    if (id === undefined) return undefined;
+    if (localId === undefined) return undefined;
     const make = (kind: RequestKind): StudentRequestActions => ({
-      submit: async ({ date, reason }) => addRequest(id, { kind, student: author, date, reason }),
-      cancel: async rid => cancelRequest(id, rid),
+      submit: async ({ date, reason }) => addRequest(localId, { kind, student: author, date, reason }),
+      cancel: async rid => cancelRequest(localId, rid),
     });
     return { absence: make('absence'), makeup: make('makeup') };
-  }, [id, author, addRequest, cancelRequest]);
+  }, [localId, author, addRequest, cancelRequest]);
 
   const studentRequests = useMemo(() => {
     const mine = (kind: RequestKind): StudentRequest[] => requests.filter(r => r.kind === kind && r.student === author).map(r => {
@@ -72,21 +73,20 @@ export default function ClassPage() {
 
   return <ClassScreen
     role={teacher ? 'teacher' : 'student'} name={name || '수업'} classId={id}
-    notices={id === undefined ? [] : store.noticesOf(id)} noticeActions={noticeActions}
+    notices={localId === undefined ? [] : store.noticesOf(localId)} noticeActions={noticeActions}
     studentRequests={studentRequests} requestActions={requestActions} teacherRows={teacherRows}
-    onTeacherAction={(tab, rowId, action) => {
-      if (id === undefined) return;
-      if (tab === '보강설정' && action === '삭제') removeAvailability(id, rowId);
-      else if ((tab === '결석정보' || tab === '보강') && (action === '승인' || action === '거절')) setRequestStatus(id, rowId, action === '승인' ? 'approved' : 'rejected');
-      else if (tab === '출석' && (action === '출석' || action === '결석')) markAttendance(id, rowId, today, action === '출석' ? 'present' : 'absent');
+    onTeacherAction={localId === undefined ? undefined : (tab, rowId, action) => {
+      if (tab === '보강설정' && action === '삭제') removeAvailability(localId, rowId);
+      else if ((tab === '결석정보' || tab === '보강') && (action === '승인' || action === '거절')) setRequestStatus(localId, rowId, action === '승인' ? 'approved' : 'rejected');
+      else if (tab === '출석' && (action === '출석' || action === '결석')) markAttendance(localId, rowId, today, action === '출석' ? 'present' : 'absent');
     }}
-    scheduleStudents={id === undefined ? [] : store.studentOptionsOf(id)}
-    localSchedules={id === undefined ? undefined : store.schedulesOf(id)}
-    onCreateLocalSchedule={id === undefined ? undefined : input => addSchedule(id, input)}
+    scheduleStudents={localId === undefined ? [] : store.studentOptionsOf(localId)}
+    localSchedules={localId === undefined ? undefined : store.schedulesOf(localId)}
+    onCreateLocalSchedule={localId === undefined ? undefined : input => addSchedule(localId, input)}
     attendanceRows={attendance.filter(a => a.student === author).map(a => ({ id: `${a.student}-${a.date}`, cells: [a.date, { label: a.status === 'present' ? '출석' : '결석', tone: a.status === 'present' ? 'blue' as const : 'red' as const }] }))}
-    attendanceSummary={{ present: attendance.filter(a => a.status === 'present' && a.date.slice(0, 7) === today.slice(0, 7)).length, absent: attendance.filter(a => a.status === 'absent' && a.date.slice(0, 7) === today.slice(0, 7)).length }}
+    attendanceSummary={localId === undefined ? undefined : { present: attendance.filter(a => a.status === 'present' && a.date.slice(0, 7) === today.slice(0, 7)).length, absent: attendance.filter(a => a.status === 'absent' && a.date.slice(0, 7) === today.slice(0, 7)).length }}
     availability={availability}
-    onSaveAvailability={id === undefined ? undefined : async (input, availabilityId) => { if (availabilityId) updateAvailability(id, availabilityId, input); else addAvailability(id, input); }}
+    onSaveAvailability={localId === undefined ? undefined : async (input, availabilityId) => { if (availabilityId) updateAvailability(localId, availabilityId, input); else addAvailability(localId, input); }}
     notifications={store.notifications} notificationActions={{ markAllRead: async () => markAllRead() }}
     calendarMarks={calendarMarks}
   />;
