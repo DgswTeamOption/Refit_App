@@ -35,7 +35,9 @@ export function ScheduleManagement({ classId, registration, onRegisterChange, st
   const students = useMemo(() => [...new Set(rows.map(item => item.studentId))].sort((a, b) => a - b), [rows]);
   function openRegistration() { setStudentId(null); setDate(''); setStart(''); setEnd(''); onRegisterChange(true); }
   function selectStudent() {
-    if (!availableStudents.length) return Alert.alert('학생이 없어요', '수업에 참여한 학생이 아직 없어요.');
+    if (!availableStudents.length) return localMode
+      ? Alert.alert('학생이 없어요', '수업에 참여한 학생이 아직 없어요.')
+      : Alert.alert('준비 중', '학생 목록 조회 기능은 준비 중이에요.');
     setChoosingStudent(true);
   }
   async function createSchedule() {
@@ -56,6 +58,7 @@ export function ScheduleManagement({ classId, registration, onRegisterChange, st
   }
   const nameOf = (id: number) => availableStudents.find(student => student.id === id)?.name ?? `학생 #${id}`;
   const status = localMode ? '등록된 일정이 없어요.' : !session ? '로그인이 필요해요.' : !classId ? '수업 정보가 필요해요.' : !current ? '일정을 불러오는 중이에요.' : current.error || '등록된 일정이 없어요.';
+  const emptyState = <Pressable accessibilityRole={current?.error ? 'button' : undefined} disabled={!current?.error} onPress={() => setRevision(value => value + 1)}><Text style={styles.empty}>{status}{current?.error ? '\n다시 시도' : ''}</Text></Pressable>;
   return <View style={styles.content}>{invalidCount > 0 && <Text style={styles.warning}>날짜 형식이 올바르지 않은 일정 {invalidCount}개를 표시하지 못했어요.</Text>}{registration ? <>
     <Text style={styles.label}>학생</Text><Pressable style={styles.input} onPress={selectStudent}><Image source={require('../../assets/figma/schedule-input.svg')} style={StyleSheet.absoluteFill} contentFit="fill" /><Text style={styles.placeholder}>{availableStudents.find(student => student.id === studentId)?.name ?? '학생 선택'}</Text></Pressable>
     <Modal transparent visible={choosingStudent} animationType="fade" onRequestClose={() => setChoosingStudent(false)}><View style={styles.overlay}><View style={styles.choices}>{availableStudents.map(student => <Pressable key={student.id} onPress={() => { setStudentId(student.id); setChoosingStudent(false); }} style={styles.choice}><Text style={styles.choiceText}>{student.name}</Text></Pressable>)}<Pressable onPress={() => setChoosingStudent(false)} style={styles.choice}><Text style={styles.choiceText}>취소</Text></Pressable></View></View></Modal>
@@ -63,10 +66,10 @@ export function ScheduleManagement({ classId, registration, onRegisterChange, st
     <Text style={styles.label}>수업 시간</Text><TimeRangeField start={start} end={end} onChange={(nextStart, nextEnd) => { setStart(nextStart); setEnd(nextEnd); }} />
     <Pressable disabled={busy} style={styles.register} onPress={createSchedule}><Image source={require('../../assets/figma/apply-button.svg')} style={StyleSheet.absoluteFill} contentFit="fill" /><Text style={styles.buttonText}>등록</Text></Pressable>
     <View style={styles.registrationHeader}><Image source={require('../../assets/figma/schedule-header.svg')} style={StyleSheet.absoluteFill} contentFit="fill" /><Text style={styles.headerCell}>학생</Text><Text style={styles.headerCell}>날짜/시간</Text></View>
-    {rows.length ? rows.map(item => <View key={item.scheduleId} style={styles.registrationRow}><Image source={require('../../assets/figma/schedule-row.svg')} style={StyleSheet.absoluteFill} contentFit="fill" /><Text style={styles.cell}>{nameOf(item.studentId)}</Text><Text style={styles.cell}>{item.start.format('YYYY.MM.DD HH:mm')}</Text></View>) : <Text style={styles.empty}>{status}</Text>}
+    {rows.length ? rows.map(item => <View key={item.scheduleId} style={styles.registrationRow}><Image source={require('../../assets/figma/schedule-row.svg')} style={StyleSheet.absoluteFill} contentFit="fill" /><Text style={styles.cell}>{nameOf(item.studentId)}</Text><Text style={styles.cell}>{item.start.format('YYYY.MM.DD HH:mm')}</Text></View>) : emptyState}
   </> : <>
     <Text style={styles.title}>요일별 시간표</Text><ScrollView horizontal><View style={{ minWidth: 362, width: Math.max(362, (days.length + 1) * 100) }}><View style={styles.tableHeader}><Image source={require('../../assets/figma/schedule-header.svg')} style={StyleSheet.absoluteFill} contentFit="fill" /><Text style={styles.headerCell}>학생</Text>{days.map(value => <Text key={value} style={styles.headerCell}>{weekdays[value]}</Text>)}</View>
-    {students.length ? students.map(student => <View key={student} style={styles.tableRow}><Image source={require('../../assets/figma/schedule-row.svg')} style={StyleSheet.absoluteFill} contentFit="fill" /><Text style={styles.cell}>{nameOf(student)}</Text>{days.map(value => <Text key={value} style={styles.cell}>{rows.filter(item => item.studentId === student && item.start.day() === value).map(item => item.start.format('MM/DD HH:mm')).join('\n') || '—'}</Text>)}</View>) : <Text style={styles.empty}>{status}</Text>}</View></ScrollView>
+    {students.length ? students.map(student => <View key={student} style={styles.tableRow}><Image source={require('../../assets/figma/schedule-row.svg')} style={StyleSheet.absoluteFill} contentFit="fill" /><Text style={styles.cell}>{nameOf(student)}</Text>{days.map(value => <Text key={value} style={styles.cell}>{rows.filter(item => item.studentId === student && item.start.day() === value).map(item => item.start.format('MM/DD HH:mm')).join('\n') || '—'}</Text>)}</View>) : emptyState}</View></ScrollView>
     <Pressable style={styles.open} onPress={openRegistration}><Text style={styles.buttonText}>+ 학생 시간표 등록</Text></Pressable>
   </>}</View>;
 }
