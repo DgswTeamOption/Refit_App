@@ -146,6 +146,16 @@ test('Google 401 exposes the audience and server message without the ID token', 
   } finally { global.fetch = originalFetch; }
 });
 
+test('Google login 403 and registration 409 preserve the server error', async () => {
+  const originalFetch = global.fetch;
+  try {
+    global.fetch = async () => new Response(JSON.stringify({ status: 403, message: '탈퇴하거나 정지된 계정입니다' }), { status: 403 });
+    await assert.rejects(googleSession('google-id-token'), error => error instanceof http.ApiError && error.status === 403 && error.message === '탈퇴하거나 정지된 계정입니다');
+    global.fetch = async () => new Response(JSON.stringify({ status: 409, message: '이미 가입된 이메일입니다' }), { status: 409 });
+    await assert.rejects(authApi.registerGoogle('google-id-token', 'STUDENT'), error => error instanceof http.ApiError && error.status === 409 && error.message === '이미 가입된 이메일입니다');
+  } finally { global.fetch = originalFetch; }
+});
+
 test('a missing profile does not start Google registration', async () => {
   const originalFetch = global.fetch;
   const accessToken = `e30.${Buffer.from(JSON.stringify({ userId: 42, role: 'STUDENT' })).toString('base64url')}.signature`;

@@ -71,7 +71,16 @@ export function AuthScreen({ mode }: { mode: Mode }) {
         setBusy(true);
         try {
           if (!googleRegistered) {
-            await authApi.registerGoogle(pendingGoogleToken, role === 'teacher' ? 'TEACHER' : 'STUDENT');
+            try { await authApi.registerGoogle(pendingGoogleToken, role === 'teacher' ? 'TEACHER' : 'STUDENT'); }
+            catch (error) {
+              if (error instanceof ApiError && error.status === 409) {
+                setPendingGoogleToken(null);
+                router.replace('/');
+                Alert.alert('이미 가입된 계정이에요.', 'Google 로그인으로 계속해주세요.');
+                return;
+              }
+              throw error;
+            }
             setGoogleRegistered(true);
           }
           finishLogin(await googleSession(pendingGoogleToken));
