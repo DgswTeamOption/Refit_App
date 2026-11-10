@@ -2,6 +2,7 @@ import { Image } from 'expo-image';
 import { useRef, useState } from 'react';
 import { Alert, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { Calendar, type CalendarMarks } from './Calendar';
+import { isPastAbsenceDate } from '../services/absence';
 
 export type StudentRequest = { id: string; dateLabel: string; statusLabel: string; canCancel: boolean };
 export type StudentRequestActions = {
@@ -18,6 +19,7 @@ export function StudentRequests({ kind, requests = [], actions, calendarMarks, f
   async function submit() {
     if (inFlight.current) return;
     if (!date || !reason.trim()) return Alert.alert('날짜와 사유를 입력해주세요.');
+    if (kind === 'absence' && isPastAbsenceDate(date)) return Alert.alert('지난 날짜로는 결석을 신청할 수 없어요.');
     if (reason.trim().length > 500) return Alert.alert('신청 사유는 500자 이하로 입력해주세요.');
     if (!actions?.submit) return Alert.alert('준비 중', `${label} 신청 기능은 준비 중이에요.`);
     inFlight.current = true; setBusy(true);

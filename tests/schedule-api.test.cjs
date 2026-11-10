@@ -19,7 +19,7 @@ if (originalApiUrl !== undefined) process.env.EXPO_PUBLIC_API_URL = originalApiU
 const { scheduleApi, parseServerDate, scheduleDates, studentScheduleDates, scheduleAccessibility } = loadTypeScript('src/services/schedule.ts', { './http': http });
 const { emailApi } = loadTypeScript('src/services/email.ts', { './http': http });
 const { notificationApi } = loadTypeScript('src/services/notification.ts', { './http': http });
-const { absenceApi, absenceStatusLabel, validateAbsenceList } = loadTypeScript('src/services/absence.ts', { './http': http });
+const { absenceApi, absenceStatusLabel, isPastAbsenceDate, validateAbsenceList } = loadTypeScript('src/services/absence.ts', { './http': http });
 const { classroomApi, classroomRequest, ClassroomTimeoutError } = loadTypeScript('src/services/classroom.ts', { './http': http });
 const { userApi } = loadTypeScript('src/services/user.ts', { './http': http, 'react-native': { Platform: { OS: 'ios' } } });
 const fakeProfile = { id: 42, name: '민지', role: 'STUDENT', profileImageUrl: null };
@@ -342,7 +342,18 @@ test('absence lists use separate student and teacher endpoints', async () => {
     assert.equal(calls[0].options.headers.get('Authorization'), 'Bearer student-token');
     assert.equal(calls[1].url, 'http://localhost:8080/api/class/absences/7');
     assert.equal(calls[1].options.headers.get('Authorization'), 'Bearer teacher-token');
+    await absenceApi.listClass(7, 'teacher-token', { status: 'PENDING', year: 2026, month: 11 });
+    assert.equal(calls[2].url, 'http://localhost:8080/api/class/absences/7?status=PENDING&year=2026&month=11');
+    await absenceApi.listClass(7, 'teacher-token', { month: 11 });
+    assert.equal(calls[3].url, 'http://localhost:8080/api/class/absences/7?month=11');
   } finally { global.fetch = originalFetch; }
+});
+
+test('absence dates before the local current day are rejected', () => {
+  const now = new Date(2026, 10, 10, 23, 59);
+  assert.equal(isPastAbsenceDate('2026-11-09', now), true);
+  assert.equal(isPastAbsenceDate('2026-11-10', now), false);
+  assert.equal(isPastAbsenceDate('2026-11-11', now), false);
 });
 
 

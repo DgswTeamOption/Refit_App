@@ -11,6 +11,11 @@ export type Absence = {
   updated_at: string;
 };
 export type AbsenceListItem = Absence & { student_name: string | null };
+export type AbsenceFilters = { status?: Absence['status']; year?: number; month?: number };
+export function isPastAbsenceDate(date: string, now = new Date()): boolean {
+  const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+  return date < today;
+}
 export function validateAbsenceList(value: unknown, classId: number, studentId?: number): AbsenceListItem[] {
   const statuses = new Set(['PENDING', 'APPROVED', 'REJECTED', 'CANCELED']);
   if (!Array.isArray(value) || !value.every(item => item && typeof item === 'object' && Number.isSafeInteger(item.id) && item.id > 0 && item.class_id === classId && Number.isSafeInteger(item.student_id) && item.student_id > 0 && (studentId === undefined || item.student_id === studentId) && typeof item.absence_date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(item.absence_date) && typeof item.reason === 'string' && statuses.has(item.status))) {
@@ -23,7 +28,14 @@ export function absenceStatusLabel(status: Absence['status']): string {
 }
 export const absenceApi = {
   listMine: (classId: number, token: string) => request<AbsenceListItem[]>(`/api/class/absences/${classId}/me`, {}, token),
-  listClass: (classId: number, token: string) => request<AbsenceListItem[]>(`/api/class/absences/${classId}`, {}, token),
+  listClass: (classId: number, token: string, filters?: AbsenceFilters) => {
+    const params = new URLSearchParams();
+    if (filters?.status) params.set('status', filters.status);
+    if (filters?.year !== undefined) params.set('year', String(filters.year));
+    if (filters?.month !== undefined) params.set('month', String(filters.month));
+    const query = params.toString();
+    return request<AbsenceListItem[]>(`/api/class/absences/${classId}${query ? `?${query}` : ''}`, {}, token);
+  },
   create: (classId: number, date: string, reason: string, token: string) => request<Absence>(`/api/class/absences/${classId}`, { method: 'POST', ...jsonBody({ absence_date: date, reason }) }, token),
   cancel: (absenceId: number, token: string) => request<void>(`/api/class/absences/${absenceId}`, { method: 'DELETE' }, token),
   approve: (absenceId: number, token: string) => request<Absence>(`/api/class/absences/${absenceId}/approve`, { method: 'PATCH' }, token),
