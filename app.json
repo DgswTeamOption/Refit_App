@@ -11,6 +11,7 @@
       "bundleIdentifier": "com.option.refit"
     },
     "android": {
+      "package": "com.option.refit",
       "adaptiveIcon": {
         "backgroundColor": "#E6F4FE",
         "foregroundImage": "./assets/android-icon-foreground.png",
