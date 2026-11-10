@@ -9,7 +9,7 @@ import type { TeacherRow } from '../components/TeacherTable';
 import { attendanceCalendarMarks, latestAbsenceLabel } from '../services/calendarMarks';
 import { parseServerDate } from '../services/schedule';
 import { classroomApi } from '../services/classroom';
-import { absenceApi, absenceStatusLabel, type AbsenceListItem } from '../services/absence';
+import { absenceApi, absenceStatusLabel, validateAbsenceList, type AbsenceListItem } from '../services/absence';
 import { useSession } from '../auth/Session';
 import { useClasses, type RequestKind } from '../store/Classes';
 
@@ -21,6 +21,7 @@ export default function ClassPage() {
   const id = classId && /^\d+$/.test(classId) && Number(classId) > 0 ? Number(classId) : undefined;
   const localId = source === 'server' ? undefined : id;
   const token = session?.accessToken;
+  const studentId = session?.user.id;
   const [absenceRevision, setAbsenceRevision] = useState(0);
   const [absenceResult, setAbsenceResult] = useState<{ token: string; id: number; teacher: boolean; revision: number; items?: AbsenceListItem[]; error?: string } | null>(null);
   useFocusEffect(useCallback(() => {
@@ -28,11 +29,11 @@ export default function ClassPage() {
     let active = true;
     const load = teacher ? absenceApi.listClass : absenceApi.listMine;
     load(id, token).then(items => {
-      if (!Array.isArray(items)) throw new Error('결석 신청 내역을 확인할 수 없어요.');
-      if (active) setAbsenceResult({ token, id, teacher, revision: absenceRevision, items });
+      const verified = validateAbsenceList(items, id, teacher ? undefined : studentId);
+      if (active) setAbsenceResult({ token, id, teacher, revision: absenceRevision, items: verified });
     }).catch(error => { if (active) setAbsenceResult({ token, id, teacher, revision: absenceRevision, error: error instanceof Error ? error.message : '결석 신청 내역을 불러오지 못했어요.' }); });
     return () => { active = false; };
-  }, [source, id, token, teacher, absenceRevision]));
+  }, [source, id, token, teacher, studentId, absenceRevision]));
   const currentAbsences = absenceResult && absenceResult.token === token && absenceResult.id === id && absenceResult.teacher === teacher && absenceResult.revision === absenceRevision ? absenceResult : null;
   const absenceStatus = source === 'server' ? currentAbsences?.error ?? (!currentAbsences ? '결석 신청 내역을 불러오는 중이에요.' : undefined) : undefined;
   const [serverHome, setServerHome] = useState<{ token: string; id: number; name?: string; error?: string } | null>(null);
@@ -73,7 +74,7 @@ export default function ClassPage() {
         Alert.alert('결석 신청 완료', '결석 신청이 접수됐어요.');
       }, cancel: async requestId => {
         const absenceId = Number(requestId);
-        if (!Number.isSafeInteger(absenceId) || absenceId <= 0) throw new Error('결석 신청 정보를 확인할 수 없어요.');
+        if (!Number.isSafeInteger(absenceId) || absenceId <= 0 || !currentAbsences?.items?.some(item => item.id === absenceId && item.student_id === session.user.id && item.class_id === id && item.status === 'PENDING')) throw new Error('대기 중인 결석 신청을 다시 확인해주세요.');
         try { await absenceApi.cancel(absenceId, session.accessToken); }
         finally { setAbsenceRevision(value => value + 1); }
       }, view: requestId => {
@@ -136,7 +137,7 @@ export default function ClassPage() {
     onTeacherAction={localId === undefined ? (source === 'server' && teacher && token ? async (tab, rowId, action) => {
       if (tab !== '결석정보' || (action !== '승인' && action !== '거절')) throw new Error('해당 기능은 준비 중이에요.');
       const absenceId = Number(rowId);
-      if (!Number.isSafeInteger(absenceId) || absenceId <= 0) throw new Error('결석 신청 정보를 확인할 수 없어요.');
+      if (!Number.isSafeInteger(absenceId) || absenceId <= 0 || !currentAbsences?.items?.some(item => item.id === absenceId && item.class_id === id && item.status === 'PENDING')) throw new Error('대기 중인 결석 신청을 다시 확인해주세요.');
       try { await (action === '승인' ? absenceApi.approve(absenceId, token) : absenceApi.reject(absenceId, token)); }
       finally { setAbsenceRevision(value => value + 1); }
     } : undefined) : (tab, rowId, action) => {

@@ -19,7 +19,7 @@ if (originalApiUrl !== undefined) process.env.EXPO_PUBLIC_API_URL = originalApiU
 const { scheduleApi, parseServerDate, scheduleDates, studentScheduleDates, scheduleAccessibility } = loadTypeScript('src/services/schedule.ts', { './http': http });
 const { emailApi } = loadTypeScript('src/services/email.ts', { './http': http });
 const { notificationApi } = loadTypeScript('src/services/notification.ts', { './http': http });
-const { absenceApi, absenceStatusLabel } = loadTypeScript('src/services/absence.ts', { './http': http });
+const { absenceApi, absenceStatusLabel, validateAbsenceList } = loadTypeScript('src/services/absence.ts', { './http': http });
 const { classroomApi, classroomRequest, ClassroomTimeoutError } = loadTypeScript('src/services/classroom.ts', { './http': http });
 const { userApi } = loadTypeScript('src/services/user.ts', { './http': http, 'react-native': { Platform: { OS: 'ios' } } });
 const fakeProfile = { id: 42, name: '민지', role: 'STUDENT', profileImageUrl: null };
@@ -348,4 +348,14 @@ test('absence lists use separate student and teacher endpoints', async () => {
 
 test('absence statuses distinguish pending, approval, rejection and cancellation', () => {
   assert.deepEqual(['PENDING', 'APPROVED', 'REJECTED', 'CANCELED'].map(absenceStatusLabel), ['승인 대기', '수락됨', '거절됨', '취소됨']);
+});
+
+
+test('absence lists reject records for another class or student', () => {
+  const own = { id: 12, class_id: 7, student_id: 3, student_name: '학생', absence_date: '2026-11-12', reason: '병원', status: 'CANCELED' };
+  assert.deepEqual(validateAbsenceList([own], 7, 3), [own]);
+  assert.deepEqual(validateAbsenceList([own], 7), [own]);
+  assert.throws(() => validateAbsenceList([{ ...own, class_id: 8 }], 7, 3));
+  assert.throws(() => validateAbsenceList([{ ...own, student_id: 4 }], 7, 3));
+  assert.throws(() => validateAbsenceList([{ ...own, status: 'UNKNOWN' }], 7, 3));
 });
