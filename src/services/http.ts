@@ -28,7 +28,12 @@ async function performRequest<T>(path: string, options: RequestInit, accessToken
   if (!__DEV__ && !baseUrl.startsWith('https://')) throw new Error('배포 서버에는 HTTPS 주소가 필요해요.');
   const headers = new Headers(options.headers);
   if (accessToken) headers.set('Authorization', `Bearer ${accessToken}`);
-  const response = await fetch(`${baseUrl}${path}`, { ...options, headers });
+  let response: Response;
+  try { response = await fetch(`${baseUrl}${path}`, { ...options, headers }); }
+  catch (error) {
+    if (error instanceof TypeError) throw new Error('서버에 연결하지 못했어요. 네트워크 연결을 확인해주세요.');
+    throw error;
+  }
   if (response.status === 401 && accessToken) unauthorizedListeners.forEach(listener => listener(accessToken));
   const content = await response.text();
   if (!content.trim() && response.ok && raw) return undefined;

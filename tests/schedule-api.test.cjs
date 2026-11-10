@@ -315,3 +315,16 @@ test('notification loading can recover when the server does not respond', async 
     await assert.rejects(notificationApi.list('token', 0, 5), { message: '알림 조회가 지연되고 있어요. 잠시 후 다시 시도해주세요.' });
   } finally { global.fetch = originalFetch; }
 });
+
+
+test('network failures are understandable without masking cancellation', async () => {
+  const originalFetch = global.fetch;
+  try {
+    global.fetch = async () => { throw new TypeError('Network request failed'); };
+    await assert.rejects(scheduleApi.list(7, 'token'), { message: '서버에 연결하지 못했어요. 네트워크 연결을 확인해주세요.' });
+    const cancelled = new Error('aborted');
+    cancelled.name = 'AbortError';
+    global.fetch = async () => { throw cancelled; };
+    await assert.rejects(scheduleApi.list(7, 'token'), error => error === cancelled);
+  } finally { global.fetch = originalFetch; }
+});
