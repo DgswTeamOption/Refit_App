@@ -1,8 +1,13 @@
 import { jsonBody, requestRaw } from './http';
-import type { Schedule } from './schedule';
+import { scheduleDates, studentScheduleDates, validateScheduleList, type Schedule } from './schedule';
 
 export type Classroom = { id: number; name: string; classCode: string | null; teacherName: string; createdAt: string };
 export type ClassroomHome = { classroomId: number; name: string; classCode: string | null; teacherName: string; memberCount: number; createdAt: string; calendar: Schedule[] };
+export function classroomCalendarDates(home: ClassroomHome | undefined, classId: number, studentId?: number): string[] {
+  if (!home || home.classroomId !== classId) throw new Error('수업 일정을 확인할 수 없어요.');
+  const schedules = validateScheduleList(home.calendar, classId);
+  return studentId === undefined ? scheduleDates(schedules) : studentScheduleDates(schedules, studentId);
+}
 export class ClassroomTimeoutError extends Error {
   constructor(write: boolean) {
     super(write ? '요청 결과를 확인하지 못했어요. 수업 목록을 확인한 후 다시 시도해주세요.' : '서버 응답이 지연되고 있어요. 잠시 후 다시 시도해주세요.');

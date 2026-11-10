@@ -16,11 +16,12 @@ const originalApiUrl = process.env.EXPO_PUBLIC_API_URL;
 delete process.env.EXPO_PUBLIC_API_URL;
 const http = loadTypeScript('src/services/http.ts', { 'react-native': { Platform: { OS: 'ios' } } });
 if (originalApiUrl !== undefined) process.env.EXPO_PUBLIC_API_URL = originalApiUrl;
-const { scheduleApi, parseServerDate, scheduleDates, studentScheduleDates, scheduleAccessibility, validateScheduleList } = loadTypeScript('src/services/schedule.ts', { './http': http });
+const schedule = loadTypeScript('src/services/schedule.ts', { './http': http });
+const { scheduleApi, parseServerDate, scheduleDates, studentScheduleDates, scheduleAccessibility, validateScheduleList } = schedule;
 const { emailApi } = loadTypeScript('src/services/email.ts', { './http': http });
 const { notificationApi } = loadTypeScript('src/services/notification.ts', { './http': http });
 const { absenceApi, absenceRequest, absenceStatusLabel, isPastAbsenceDate, validateAbsenceList } = loadTypeScript('src/services/absence.ts', { './http': http });
-const { classroomApi, classroomRequest, ClassroomTimeoutError } = loadTypeScript('src/services/classroom.ts', { './http': http });
+const { classroomApi, classroomRequest, classroomCalendarDates, ClassroomTimeoutError } = loadTypeScript('src/services/classroom.ts', { './http': http, './schedule': schedule });
 const { userApi } = loadTypeScript('src/services/user.ts', { './http': http, 'react-native': { Platform: { OS: 'ios' } } });
 const fakeProfile = { id: 42, name: '민지', role: 'STUDENT', profileImageUrl: null };
 const fakeUserApi = { get: async (id, token) => { assert.equal(id, 42); assert.ok(token); return fakeProfile; } };
@@ -53,6 +54,16 @@ test('schedule lists reject malformed responses and schedules from another class
   assert.throws(() => validateScheduleList(undefined, 7));
   assert.throws(() => validateScheduleList([{ ...item, classId: 8 }], 7));
   assert.throws(() => validateScheduleList([{ ...item, studentId: null }], 7));
+});
+
+test('class calendar validates its class and only shows the student’s schedules', () => {
+  const item = { scheduleId: 1, classId: 7, studentId: 3, startTime: '2026-11-10 09:00:00', endTime: '2026-11-10 10:00:00' };
+  const home = { classroomId: 7, calendar: [item, { ...item, scheduleId: 2, studentId: 4, startTime: '2026-11-11 09:00:00' }] };
+  assert.deepEqual(classroomCalendarDates(home, 7), ['2026-11-10', '2026-11-11']);
+  assert.deepEqual(classroomCalendarDates(home, 7, 3), ['2026-11-10']);
+  assert.throws(() => classroomCalendarDates(home, 8));
+  assert.throws(() => classroomCalendarDates({ ...home, calendar: null }, 7));
+  assert.throws(() => classroomCalendarDates({ ...home, calendar: [{ ...item, classId: 8 }] }, 7));
 });
 
 test('schedule requests use bearer authentication and server field names', async () => {

@@ -3,8 +3,7 @@ import * as ImagePicker from 'expo-image-picker';
 import { useCallback, useRef, useState } from 'react';
 import { useFocusEffect } from 'expo-router';
 import { useSession, type Session } from '../auth/Session';
-import { scheduleDates, studentScheduleDates } from '../services/schedule';
-import { classroomApi } from '../services/classroom';
+import { classroomApi, classroomCalendarDates } from '../services/classroom';
 import { Calendar, type CalendarMarks, type ClassCalendarColor } from './Calendar';
 import { NotificationBell, type NotificationActions, type NotificationItem } from './NotificationBell';
 import { ClassCards, type ClassSummary } from './ClassCards';
@@ -30,13 +29,12 @@ export function HomeScreen({ role, classes = [], notifications, notificationActi
     let active = true;
     const [year, monthNumber] = monthKey.split('-').map(Number);
     const classIds = ids.split(',').map(Number);
-    Promise.allSettled(classIds.map(id => classroomApi.home(id, year, monthNumber, session.accessToken))).then(results => {
+    Promise.allSettled(classIds.map(async id => classroomCalendarDates(await classroomApi.home(id, year, monthNumber, session.accessToken), id, role === 'student' ? session.user.id : undefined))).then(results => {
       if (!active) return;
       const dates: Record<number, string[]> = {};
       results.forEach((result, index) => {
         if (result.status !== 'fulfilled') return;
-        const schedules = result.value?.calendar ?? [];
-        dates[classIds[index]] = role === 'teacher' ? scheduleDates(schedules) : studentScheduleDates(schedules, session.user.id);
+        dates[classIds[index]] = result.value;
       });
       setCalendarResult({ session, ids, monthKey, dates });
       if (results.some(result => result.status === 'rejected')) Alert.alert('일정 조회 실패', '일부 수업 일정을 불러오지 못했어요.');
