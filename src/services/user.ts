@@ -5,8 +5,8 @@ import { jsonBody, request } from './http';
 export type UserProfile = { id: number; name: string; emailId: string; birthDate: string; role: 'STUDENT' | 'TEACHER'; profileImageUrl: string | null };
 export const userApi = {
   get: (userId: number, token: string) => request<UserProfile>(`/api/users/${userId}`, {}, token),
-  updateName: (name: string, token: string) => request<void>('/api/setting/username', { method: 'PATCH', ...jsonBody({ name }) }, token),
-  updateImage: (profileImageUrl: string, token: string) => request<void>('/api/setting/profile-image', { method: 'PATCH', ...jsonBody({ profileImageUrl }) }, token),
+  updateName: (name: string, token: string) => request<UserProfile>('/api/setting/username', { method: 'PATCH', ...jsonBody({ name }) }, token),
+  updateImage: (profileImageUrl: string, token: string) => request<UserProfile>('/api/setting/profile-image', { method: 'PATCH', ...jsonBody({ profileImageUrl }) }, token),
   remove: (userId: number, token: string) => request<void>(`/api/users/${userId}`, { method: 'DELETE' }, token),
   upload: async (asset: ImagePickerAsset, token: string) => {
     const form = new FormData();

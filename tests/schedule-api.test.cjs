@@ -121,6 +121,16 @@ test('email verification and profile changes use the documented server fields', 
   } finally { global.fetch = originalFetch; }
 });
 
+test('profile updates expose the saved server profile', async () => {
+  const originalFetch = global.fetch;
+  const updated = { id: 42, name: '새 이름', profileImageUrl: '/uploads/new.jpg', role: 'STUDENT' };
+  global.fetch = async () => new Response(JSON.stringify({ success: true, data: updated }), { status: 200 });
+  try {
+    assert.deepEqual(await userApi.updateName('새 이름', 'token'), updated);
+    assert.deepEqual(await userApi.updateImage('/uploads/new.jpg', 'token'), updated);
+  } finally { global.fetch = originalFetch; }
+});
+
 test('Google registration and login use an ID token and obtain the server profile', async () => {
   const originalFetch = global.fetch;
   const calls = [];

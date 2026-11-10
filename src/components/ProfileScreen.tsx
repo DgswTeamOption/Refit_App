@@ -51,8 +51,9 @@ function ProfileBody({ page, notifications, notificationActions }: ProfileProps)
     if (!session || !profile) return Alert.alert('프로필 정보를 먼저 불러와야 해요.');
     setBusy(true);
     try {
-      await userApi.updateName(nextName, session.accessToken);
-      setSession(current => current?.accessToken === session.accessToken ? { ...current, user: { ...current.user, name: nextName } } : current);
+      const updated = await userApi.updateName(nextName, session.accessToken);
+      if (!updated || updated.id !== session.user.id || typeof updated.name !== 'string') throw new Error('변경 결과를 확인하지 못했어요. 내 정보에서 확인해주세요.');
+      setSession(current => current?.accessToken === session.accessToken ? { ...current, user: { ...current.user, name: updated.name } } : current);
       router.replace('/profile');
     }
     catch (e) { Alert.alert('정보 수정 실패', e instanceof Error ? e.message : '다시 시도해주세요.'); }
@@ -68,9 +69,10 @@ function ProfileBody({ page, notifications, notificationActions }: ProfileProps)
       if (asset.fileSize && asset.fileSize > 10 * 1024 * 1024) return Alert.alert('10MB 이하의 사진을 선택해주세요.');
       setBusy(true);
       const uploaded = await userApi.upload(asset, session.accessToken);
-      await userApi.updateImage(uploaded.imageUrl, session.accessToken);
-      setSession(current => current?.accessToken === session.accessToken ? { ...current, user: { ...current.user, profileImageUrl: uploaded.imageUrl } } : current);
-      setResult(current => current?.token === session.accessToken && current.userId === session.user.id && current.profile ? { ...current, profile: { ...current.profile, profileImageUrl: uploaded.imageUrl } } : current);
+      const updated = await userApi.updateImage(uploaded.imageUrl, session.accessToken);
+      if (!updated || updated.id !== session.user.id || typeof updated.profileImageUrl !== 'string' || !updated.profileImageUrl) throw new Error('변경 결과를 확인하지 못했어요. 내 정보에서 확인해주세요.');
+      setSession(current => current?.accessToken === session.accessToken ? { ...current, user: { ...current.user, profileImageUrl: updated.profileImageUrl } } : current);
+      setResult(current => current?.token === session.accessToken && current.userId === session.user.id && current.profile ? { ...current, profile: { ...current.profile, profileImageUrl: updated.profileImageUrl } } : current);
     } catch (e) { Alert.alert('사진 변경 실패', e instanceof Error ? e.message : '다시 시도해주세요.'); }
     finally { setBusy(false); }
   }
