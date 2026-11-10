@@ -80,15 +80,19 @@ export default function ClassPage() {
         finally { setAbsenceRevision(value => value + 1); }
       }, view: requestId => {
         const item = currentAbsences?.items?.find(entry => String(entry.id) === requestId);
-        if (item) Alert.alert('신청 상세', `${item.absence_date}\n${item.reason}`);
+        if (item) Alert.alert('신청 상세', `날짜: ${item.absence_date}\n상태: ${absenceStatusLabel(item.status)}\n사유: ${item.reason}`);
       } } };
     }
     const make = (kind: RequestKind): StudentRequestActions => ({
       submit: async ({ date, reason }) => addRequest(localId, { kind, student: author, date, reason }),
       cancel: async rid => cancelRequest(localId, rid),
+      view: rid => {
+        const item = requests.find(r => r.id === rid && r.kind === kind && r.student === author);
+        if (item) Alert.alert('신청 상세', `날짜: ${item.date}\n상태: ${item.status === 'approved' ? '수락됨' : item.status === 'rejected' ? '거절됨' : '승인 대기'}\n사유: ${item.reason}`);
+      },
     });
     return { absence: make('absence'), makeup: make('makeup') };
-  }, [localId, id, session, teacher, currentAbsences, author, addRequest, cancelRequest]);
+  }, [localId, id, session, teacher, currentAbsences, author, addRequest, cancelRequest, requests]);
 
   const studentRequests = useMemo(() => {
     const mine = (kind: RequestKind): StudentRequest[] => requests.filter(r => r.kind === kind && r.student === author).map(r => {
