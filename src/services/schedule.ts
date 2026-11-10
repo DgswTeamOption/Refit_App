@@ -7,6 +7,12 @@ export const serverDateFormat = 'YYYY-MM-DD HH:mm:ss';
 export const parseServerDate = (value: string) => dayjs(value, serverDateFormat, true);
 export type Schedule = { scheduleId: number; classId: number; studentId: number; startTime: string; endTime: string };
 export type ScheduleInput = { studentId: number; startTime: string; endTime: string };
+export function scheduleAccessibility(startTime: string, endTime: string): string {
+  const start = parseServerDate(startTime);
+  const end = parseServerDate(endTime);
+  if (!start.isValid()) return '시작 시간을 확인할 수 없어요.';
+  return `시작 ${start.format('YYYY년 M월 D일 HH:mm')}, ${end.isValid() ? `종료 ${end.format('YYYY년 M월 D일 HH:mm')}` : '종료 시간을 확인할 수 없어요.'}`;
+}
 export function scheduleDates(schedules: Schedule[]): string[] {
   return [...new Set(schedules.map(item => parseServerDate(item.startTime)).filter(date => date.isValid()).map(date => date.format('YYYY-MM-DD')))];
 }

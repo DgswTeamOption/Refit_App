@@ -16,7 +16,7 @@ const originalApiUrl = process.env.EXPO_PUBLIC_API_URL;
 delete process.env.EXPO_PUBLIC_API_URL;
 const http = loadTypeScript('src/services/http.ts', { 'react-native': { Platform: { OS: 'ios' } } });
 if (originalApiUrl !== undefined) process.env.EXPO_PUBLIC_API_URL = originalApiUrl;
-const { scheduleApi, parseServerDate, scheduleDates, studentScheduleDates } = loadTypeScript('src/services/schedule.ts', { './http': http });
+const { scheduleApi, parseServerDate, scheduleDates, studentScheduleDates, scheduleAccessibility } = loadTypeScript('src/services/schedule.ts', { './http': http });
 const { emailApi } = loadTypeScript('src/services/email.ts', { './http': http });
 const { notificationApi } = loadTypeScript('src/services/notification.ts', { './http': http });
 const { absenceApi } = loadTypeScript('src/services/absence.ts', { './http': http });
@@ -297,4 +297,10 @@ test('notifications use authenticated pagination and server deletion', async () 
     assert.equal(calls[1].url, 'http://localhost:8080/notifications/8');
     assert.equal(calls[1].options.method, 'DELETE');
   } finally { global.fetch = originalFetch; }
+});
+
+
+test('schedule accessibility preserves full start and end dates', () => {
+  assert.equal(scheduleAccessibility('2026-11-12 23:30:00', '2026-11-13 00:30:00'), '시작 2026년 11월 12일 23:30, 종료 2026년 11월 13일 00:30');
+  assert.match(scheduleAccessibility('2026-11-12 23:30:00', 'invalid'), /종료 시간을 확인할 수 없어요/);
 });
