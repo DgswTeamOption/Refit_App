@@ -1,7 +1,7 @@
 import { router } from 'expo-router';
 import { createContext, useContext, useEffect, useMemo, useRef, useState, type Dispatch, type ReactNode, type SetStateAction } from 'react';
 import { onUnauthorized } from '../services/http';
-import { ActivityIndicator, View } from 'react-native';
+import { ActivityIndicator, Alert, View } from 'react-native';
 import { readStoredSession, writeStoredSession } from './sessionStorage';
 
 export type Session = { accessToken: string; refreshToken: string; user: { id: number; name: string; role: 'STUDENT' | 'TEACHER'; profileImageUrl?: string | null } };
@@ -36,6 +36,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     currentSession.current = null;
     setSession(current => current?.accessToken === token ? null : current);
     router.replace('/');
+    Alert.alert('다시 로그인해주세요', '로그인이 만료됐거나 인증이 해제됐어요.');
   }), []);
   const value = useMemo(() => ({ localUser, setLocalUser, session, setSession, signupDraft, setSignupDraft, pendingGoogleToken, setPendingGoogleToken }), [localUser, session, signupDraft, pendingGoogleToken]);
   if (!hydrated) return <View style={{ flex: 1, backgroundColor: '#fff', justifyContent: 'center' }}><ActivityIndicator color="#0099ff" /></View>;
