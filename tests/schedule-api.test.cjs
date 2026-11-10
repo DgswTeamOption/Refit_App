@@ -18,7 +18,7 @@ const http = loadTypeScript('src/services/http.ts', { 'react-native': { Platform
 if (originalApiUrl !== undefined) process.env.EXPO_PUBLIC_API_URL = originalApiUrl;
 const { scheduleApi, parseServerDate, scheduleDates, studentScheduleDates } = loadTypeScript('src/services/schedule.ts', { './http': http });
 const { emailApi } = loadTypeScript('src/services/email.ts', { './http': http });
-const { classroomApi } = loadTypeScript('src/services/classroom.ts', { './http': http });
+const { classroomApi, classroomRequest, ClassroomTimeoutError } = loadTypeScript('src/services/classroom.ts', { './http': http });
 const { userApi } = loadTypeScript('src/services/user.ts', { './http': http, 'react-native': { Platform: { OS: 'ios' } } });
 const fakeProfile = { id: 42, name: '민지', role: 'STUDENT', profileImageUrl: null };
 const fakeUserApi = { get: async (id, token) => { assert.equal(id, 42); assert.ok(token); return fakeProfile; } };
@@ -238,5 +238,17 @@ test('classroom endpoints accept direct JSON and empty leave responses', async (
     assert.deepEqual(JSON.parse(calls[2].options.body), { classCode: 'AB12CD34' });
     assert.equal(calls[3].url, 'http://localhost:8080/api/class/7?year=2026&month=11');
     assert.equal(calls[4].options.method, 'DELETE');
+  } finally { global.fetch = originalFetch; }
+});
+
+
+test('classroom requests stop waiting and distinguish unknown write outcomes', async () => {
+  const originalFetch = global.fetch;
+  global.fetch = (_url, options) => new Promise((_resolve, reject) => {
+    options.signal.addEventListener('abort', () => reject(new Error('aborted')));
+  });
+  try {
+    await assert.rejects(classroomRequest('/api/class', {}, 'token', 5), error => error instanceof ClassroomTimeoutError && error.message.includes('서버 응답'));
+    await assert.rejects(classroomRequest('/api/class', { method: 'POST' }, 'token', 5), error => error instanceof ClassroomTimeoutError && error.message.includes('수업 목록'));
   } finally { global.fetch = originalFetch; }
 });

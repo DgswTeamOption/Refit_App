@@ -3,7 +3,7 @@ import { useFocusEffect } from 'expo-router';
 import { Alert } from 'react-native';
 import { HomeScreen } from '../components/HomeScreen';
 import type { ClassSummary } from '../components/ClassCards';
-import { classroomApi, type Classroom } from '../services/classroom';
+import { classroomApi, ClassroomTimeoutError, type Classroom } from '../services/classroom';
 import { ApiError } from '../services/http';
 import { scheduleDates, studentScheduleDates } from '../services/schedule';
 import { useSession } from '../auth/Session';
@@ -47,7 +47,9 @@ export default function Home() {
     if (teacher && bannerUri) throw new Error('서버에 배너 저장 기능이 아직 없어요. 사진을 선택하지 않고 수업을 만들어주세요.');
     const code = value.toUpperCase();
     if (!teacher && !/^[A-Z0-9]{8}$/.test(code)) throw new Error('수업코드는 영문과 숫자 8자리로 입력해주세요.');
-    const item = teacher ? await classroomApi.create(value, session.accessToken) : await classroomApi.join(code, session.accessToken);
+    let item: Classroom | undefined;
+    try { item = teacher ? await classroomApi.create(value, session.accessToken) : await classroomApi.join(code, session.accessToken); }
+    catch (error) { if (error instanceof ClassroomTimeoutError) setRevision(current => current + 1); throw error; }
     if (!item) throw new Error('수업 결과를 확인할 수 없어요.');
     const summary = toSummary(item, teacher);
     setResult(previous => previous?.token === session.accessToken && previous.items ? { token: session.accessToken, items: [summary, ...previous.items.filter(existing => existing.id !== summary.id)] } : previous);
@@ -58,7 +60,8 @@ export default function Home() {
     if (item.source === 'server') {
       if (!session) throw new Error('로그인이 필요해요.');
       if (teacher) throw new Error('수업 삭제 기능은 준비 중이에요.');
-      await classroomApi.leave(item.id, session.accessToken);
+      try { await classroomApi.leave(item.id, session.accessToken); }
+      catch (error) { if (error instanceof ClassroomTimeoutError) setRevision(current => current + 1); throw error; }
       setResult(previous => previous?.token === session.accessToken && previous.items ? { ...previous, items: previous.items.filter(existing => existing.id !== item.id) } : previous);
       setRevision(value => value + 1);
       return;
