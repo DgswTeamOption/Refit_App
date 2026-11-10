@@ -6,7 +6,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { emailApi } from '../services/email';
 import { useSession, type Session } from '../auth/Session';
 import { getGoogleIdToken } from '../auth/google';
-import { authApi, emailSession, googleSession, GoogleUserNotRegistered } from '../services/auth';
+import { authApi, emailSession, EmailLoginCompletionError, googleSession, GoogleUserNotRegistered } from '../services/auth';
 import { ApiError } from '../services/http';
 
 type Mode = 'login' | 'signup' | 'role';
@@ -102,7 +102,7 @@ export function AuthScreen({ mode }: { mode: Mode }) {
       }
       else finishLogin(await emailSession(sentEmail, code));
     } catch (error) {
-      if (mode === 'login' && error instanceof ApiError && (error.status === 404 || error.status === 429)) { setExpiresAt(0); setSentEmail(''); setCode(''); }
+      if (mode === 'login' && (error instanceof EmailLoginCompletionError || (error instanceof ApiError && (error.status === 404 || error.status === 429)))) { setExpiresAt(0); setSentEmail(''); setCode(''); }
       Alert.alert('인증 실패', error instanceof Error ? error.message : '다시 시도해주세요.');
     }
     finally { setBusy(false); }

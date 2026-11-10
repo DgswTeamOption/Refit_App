@@ -6,6 +6,7 @@ import { userApi } from './user';
 type TokenResponse = { accessToken: string; refreshToken: string };
 type AccessClaims = { userId?: unknown; role?: unknown };
 export class GoogleUserNotRegistered extends Error {}
+export class EmailLoginCompletionError extends Error {}
 async function googleRequest<T>(path: string, idToken: string, body: unknown): Promise<T | undefined> {
   try { return await request<T>(path, { method: 'POST', ...jsonBody(body) }); }
   catch (error) {
@@ -50,5 +51,10 @@ export async function googleSession(idToken: string): Promise<Session> {
 }
 
 export async function emailSession(email: string, verificationCode: string): Promise<Session> {
-  return sessionFromTokens(await authApi.loginEmail(email, verificationCode));
+  const tokens = await authApi.loginEmail(email, verificationCode);
+  try { return await sessionFromTokens(tokens); }
+  catch (error) {
+    const reason = error instanceof Error && error.message ? error.message : '프로필을 불러오지 못했어요.';
+    throw new EmailLoginCompletionError(`${reason}\n인증코드를 새로 받아 다시 로그인해주세요.`);
+  }
 }

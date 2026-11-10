@@ -155,6 +155,15 @@ test('a missing profile does not start Google registration', async () => {
   finally { global.fetch = originalFetch; }
 });
 
+test('email login allows a new code when profile loading fails after code consumption', async () => {
+  const originalFetch = global.fetch;
+  const accessToken = `e30.${Buffer.from(JSON.stringify({ userId: 42, role: 'STUDENT' })).toString('base64url')}.signature`;
+  const { emailSession: login, EmailLoginCompletionError } = loadTypeScript('src/services/auth.ts', { './http': http, './user': { userApi: { get: async () => { throw new http.ApiError(503, '프로필 조회 실패'); } } } });
+  global.fetch = async () => new Response(JSON.stringify({ success: true, data: { accessToken, refreshToken: 'refresh' } }), { status: 200 });
+  try { await assert.rejects(login('student@example.com', '123456'), error => error instanceof EmailLoginCompletionError && error.message.includes('프로필 조회 실패') && error.message.includes('인증코드를 새로 받아')); }
+  finally { global.fetch = originalFetch; }
+});
+
 test('unwrapped server errors retain their message', async () => {
   const originalFetch = global.fetch;
   global.fetch = async () => new Response(JSON.stringify({ status: 403, message: '권한이 없습니다' }), { status: 403 });
