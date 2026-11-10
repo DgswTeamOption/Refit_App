@@ -2,7 +2,8 @@ import { Image } from 'expo-image';
 import * as ImagePicker from 'expo-image-picker';
 import { useEffect, useState } from 'react';
 import { useSession, type Session } from '../auth/Session';
-import { scheduleDates, scheduleApi } from '../services/schedule';
+import { scheduleDates, studentScheduleDates } from '../services/schedule';
+import { classroomApi } from '../services/classroom';
 import { Calendar, type CalendarMarks, type ClassCalendarColor } from './Calendar';
 import { NotificationBell, type NotificationActions, type NotificationItem } from './NotificationBell';
 import { ClassCards, type ClassSummary } from './ClassCards';
@@ -12,11 +13,12 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 type Role = 'student' | 'teacher';
 
-export function HomeScreen({ role, classes = [], notifications, notificationActions, onSubmitClass, onRemoveClass }: { role: Role; classes?: ClassSummary[]; notifications?: NotificationItem[]; notificationActions?: NotificationActions; onSubmitClass?: (value: string, bannerUri?: string) => void; onRemoveClass?: (item: ClassSummary) => void }) {
+export function HomeScreen({ role, classes = [], notifications, notificationActions, onSubmitClass, onRemoveClass, listStatus, onRetry }: { role: Role; classes?: ClassSummary[]; notifications?: NotificationItem[]; notificationActions?: NotificationActions; onSubmitClass?: (value: string, bannerUri?: string) => Promise<void> | void; onRemoveClass?: (item: ClassSummary) => Promise<void> | void; listStatus?: string; onRetry?: () => void }) {
   const { session } = useSession();
   const [month, setMonth] = useState(() => { const now = new Date(); return new Date(now.getFullYear(), now.getMonth(), 1); });
   const [calendarResult, setCalendarResult] = useState<{ session: Session; ids: string; monthKey: string; dates: Record<number, string[]> } | null>(null);
   const [modalVisible, setModalVisible] = useState(false);
+  const [busy, setBusy] = useState(false);
   const [value, setValue] = useState('');
   const [banner, setBanner] = useState<ImagePicker.ImagePickerAsset | null>(null);
   const ids = [...new Set(classes.filter(item => item.source === 'server').map(item => item.id).filter(id => Number.isSafeInteger(id) && id > 0))].sort((a, b) => a - b).join(',');
@@ -26,18 +28,19 @@ export function HomeScreen({ role, classes = [], notifications, notificationActi
     let active = true;
     const [year, monthNumber] = monthKey.split('-').map(Number);
     const classIds = ids.split(',').map(Number);
-    Promise.allSettled(classIds.map(id => scheduleApi.calendar(id, year, monthNumber, session.accessToken))).then(results => {
+    Promise.allSettled(classIds.map(id => classroomApi.home(id, year, monthNumber, session.accessToken))).then(results => {
       if (!active) return;
       const dates: Record<number, string[]> = {};
       results.forEach((result, index) => {
         if (result.status !== 'fulfilled') return;
-        dates[classIds[index]] = scheduleDates(result.value ?? []);
+        const schedules = result.value?.calendar ?? [];
+        dates[classIds[index]] = role === 'teacher' ? scheduleDates(schedules) : studentScheduleDates(schedules, session.user.id);
       });
       setCalendarResult({ session, ids, monthKey, dates });
       if (results.some(result => result.status === 'rejected')) Alert.alert('일정 조회 실패', '일부 수업 일정을 불러오지 못했어요.');
     });
     return () => { active = false; };
-  }, [session, ids, monthKey]);
+  }, [session, ids, monthKey, role]);
   const currentDates = calendarResult && calendarResult.session === session && calendarResult.ids === ids && calendarResult.monthKey === monthKey ? calendarResult.dates : {};
   const teacher = role === 'teacher';
   const colors: ClassCalendarColor[] = ['peach', 'purple', 'yellow', 'mint'];
@@ -51,11 +54,13 @@ export function HomeScreen({ role, classes = [], notifications, notificationActi
   });
   const action = teacher ? '수업 만들기' : '수업 참여하기';
   function showModal() { setValue(''); setBanner(null); setModalVisible(true); }
-  function submitClass() {
+  async function submitClass() {
     if (!value.trim()) return Alert.alert(teacher ? '수업 제목을 입력해주세요.' : '수업코드를 입력해주세요.');
     if (!onSubmitClass) return Alert.alert('준비 중', `${action} 기능은 준비 중이에요.`);
-    try { onSubmitClass(value.trim(), banner?.uri); setModalVisible(false); }
+    setBusy(true);
+    try { await onSubmitClass(value.trim(), banner?.uri); setModalVisible(false); }
     catch (e) { Alert.alert(`${action} 실패`, e instanceof Error ? e.message : '다시 시도해주세요.'); }
+    finally { setBusy(false); }
   }
   async function selectBanner() {
     try {
@@ -71,12 +76,12 @@ export function HomeScreen({ role, classes = [], notifications, notificationActi
     <ScrollView contentContainerStyle={styles.content}>
       <Calendar marks={calendarMarks} classLegend={classLegend} month={month} onMonthChange={setMonth} />
       <View style={styles.sectionHeader}><Text style={styles.sectionTitle}>내 수업</Text><Pressable accessibilityRole="button" onPress={showModal}><Text style={styles.add}>+ {action}</Text></Pressable></View>
-      {classes.length ? <ClassCards classes={classes} role={role} onRemove={onRemoveClass} /> : <View style={styles.empty}><Text style={styles.emptyText}>아직 참여한 수업이 없어요</Text><Pressable accessibilityRole="button" onPress={showModal} style={styles.emptyButton}><Image source={require('../../assets/figma/home-button.svg')} style={StyleSheet.absoluteFill} contentFit="fill" /><Text style={styles.buttonText}>{action}</Text></Pressable></View>}
+      {listStatus ? <Pressable onPress={onRetry} disabled={!onRetry} style={styles.empty}><Text style={styles.emptyText}>{listStatus}</Text></Pressable> : classes.length ? <ClassCards classes={classes} role={role} onRemove={onRemoveClass} /> : <View style={styles.empty}><Text style={styles.emptyText}>아직 참여한 수업이 없어요</Text><Pressable accessibilityRole="button" onPress={showModal} style={styles.emptyButton}><Image source={require('../../assets/figma/home-button.svg')} style={StyleSheet.absoluteFill} contentFit="fill" /><Text style={styles.buttonText}>{action}</Text></Pressable></View>}
     </ScrollView>
     <Modal transparent visible={modalVisible} animationType="fade" onRequestClose={() => setModalVisible(false)}><View style={styles.overlay}><View style={styles.modal}>
       <Text style={styles.modalTitle}>{action}</Text>
       {teacher ? <><Text style={styles.label}>수업 제목 *</Text><TextInput accessibilityLabel="수업 제목" value={value} onChangeText={setValue} placeholder="수업 제목을 입력해주세요" placeholderTextColor="#aaa" style={styles.input} /><Text style={styles.label}>배너 사진</Text><Pressable accessibilityLabel="배너 사진 선택" style={styles.photo} onPress={selectBanner}>{banner ? <Image source={{ uri: banner.uri }} style={StyleSheet.absoluteFill} contentFit="cover" /> : <Text style={styles.photoText}>사진 선택</Text>}</Pressable></> : <><Text style={styles.modalDescription}>수업코드를 입력해주세요.</Text><TextInput accessibilityLabel="수업 코드" autoCapitalize="characters" value={value} onChangeText={setValue} placeholder="수업코드를 입력해주세요" placeholderTextColor="#aaa" style={styles.input} /></>}
-      <View style={styles.modalActions}><Pressable onPress={() => setModalVisible(false)} style={[styles.modalButton, styles.cancel]}><Text style={styles.cancelText}>취소</Text></Pressable><Pressable onPress={submitClass} style={[styles.modalButton, styles.confirm]}><Text style={styles.buttonText}>{teacher ? '만들기' : '참여하기'}</Text></Pressable></View>
+      <View style={styles.modalActions}><Pressable onPress={() => setModalVisible(false)} style={[styles.modalButton, styles.cancel]}><Text style={styles.cancelText}>취소</Text></Pressable><Pressable disabled={busy} onPress={submitClass} style={[styles.modalButton, styles.confirm]}><Text style={styles.buttonText}>{teacher ? '만들기' : '참여하기'}</Text></Pressable></View>
     </View></View></Modal>
   </SafeAreaView>;
 }
