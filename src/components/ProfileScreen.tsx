@@ -5,7 +5,7 @@ import { router } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { Alert, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useSession, type Session } from '../auth/Session';
+import { useSession } from '../auth/Session';
 import { emailApi } from '../services/email';
 import { baseUrl } from '../services/http';
 import { userApi, type UserProfile } from '../services/user';
@@ -22,8 +22,10 @@ export function ProfileScreen(props: ProfileProps) {
 function ProfileBody({ page, notifications, notificationActions }: ProfileProps) {
   const { session, setSession, localUser, setLocalUser } = useSession();
   const local = !session ? localUser : null;
-  const [result, setResult] = useState<{ session: Session; profile?: UserProfile; error?: string } | null>(null);
-  const current = result?.session === session ? result : null;
+  const token = session?.accessToken;
+  const userId = session?.user.id;
+  const [result, setResult] = useState<{ token: string; userId: number; profile?: UserProfile; error?: string } | null>(null);
+  const current = result?.token === token && result?.userId === userId ? result : null;
   const profile = current?.profile ?? null;
   const error = current?.error ?? '';
   const [name, setName] = useState(() => local?.name ?? '');
@@ -31,16 +33,16 @@ function ProfileBody({ page, notifications, notificationActions }: ProfileProps)
   const [confirmation, setConfirmation] = useState('');
   const [busy, setBusy] = useState(false);
   useEffect(() => {
-    if (!session) return;
+    if (!token || !userId) return;
     let active = true;
-    userApi.get(session.user.id, session.accessToken).then(user => {
+    userApi.get(userId, token).then(user => {
       if (!active) return;
-      if (!user) throw new Error('프로필 정보를 확인할 수 없어요.');
-      setResult({ session, profile: user }); setName(user.name);
-      setSession(current => current?.accessToken === session.accessToken && current.user.profileImageUrl !== user.profileImageUrl ? { ...current, user: { ...current.user, profileImageUrl: user.profileImageUrl } } : current);
-    }).catch(e => { if (active) setResult({ session, error: e instanceof Error ? e.message : '프로필을 불러오지 못했어요.' }); });
+      if (!user || user.id !== userId || typeof user.name !== 'string') throw new Error('프로필 정보를 확인할 수 없어요.');
+      setResult({ token, userId, profile: user }); setName(user.name);
+      setSession(current => current?.accessToken === token && current.user.id === userId && (current.user.name !== user.name || current.user.profileImageUrl !== user.profileImageUrl) ? { ...current, user: { ...current.user, name: user.name, profileImageUrl: user.profileImageUrl } } : current);
+    }).catch(e => { if (active) setResult({ token, userId, error: e instanceof Error ? e.message : '프로필을 불러오지 못했어요.' }); });
     return () => { active = false; };
-  }, [session, setSession]);
+  }, [token, userId, setSession]);
   async function save() {
     const nextName = name.trim();
     if (!nextName || nextName.length > 50) return Alert.alert('이름은 1~50자로 입력해주세요.');
@@ -57,6 +59,7 @@ function ProfileBody({ page, notifications, notificationActions }: ProfileProps)
   }
   async function changePhoto() {
     if (!session) return Alert.alert('로그인이 필요해요.');
+    if (!profile) return Alert.alert('프로필 정보를 먼저 불러와야 해요.');
     try {
       const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], allowsEditing: true, aspect: [1, 1], quality: 0.8 });
       if (result.canceled) return;
@@ -66,8 +69,7 @@ function ProfileBody({ page, notifications, notificationActions }: ProfileProps)
       const uploaded = await userApi.upload(asset, session.accessToken);
       await userApi.updateImage(uploaded.imageUrl, session.accessToken);
       setSession(current => current?.accessToken === session.accessToken ? { ...current, user: { ...current.user, profileImageUrl: uploaded.imageUrl } } : current);
-      const updated = await userApi.get(session.user.id, session.accessToken);
-      if (updated) setResult({ session, profile: updated });
+      setResult(current => current?.token === session.accessToken && current.userId === session.user.id && current.profile ? { ...current, profile: { ...current.profile, profileImageUrl: uploaded.imageUrl } } : current);
     } catch (e) { Alert.alert('사진 변경 실패', e instanceof Error ? e.message : '다시 시도해주세요.'); }
     finally { setBusy(false); }
   }
