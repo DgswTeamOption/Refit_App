@@ -19,7 +19,7 @@ if (originalApiUrl !== undefined) process.env.EXPO_PUBLIC_API_URL = originalApiU
 const { scheduleApi, parseServerDate, scheduleDates, studentScheduleDates, scheduleAccessibility } = loadTypeScript('src/services/schedule.ts', { './http': http });
 const { emailApi } = loadTypeScript('src/services/email.ts', { './http': http });
 const { notificationApi } = loadTypeScript('src/services/notification.ts', { './http': http });
-const { absenceApi } = loadTypeScript('src/services/absence.ts', { './http': http });
+const { absenceApi, absenceStatusLabel } = loadTypeScript('src/services/absence.ts', { './http': http });
 const { classroomApi, classroomRequest, ClassroomTimeoutError } = loadTypeScript('src/services/classroom.ts', { './http': http });
 const { userApi } = loadTypeScript('src/services/user.ts', { './http': http, 'react-native': { Platform: { OS: 'ios' } } });
 const fakeProfile = { id: 42, name: '민지', role: 'STUDENT', profileImageUrl: null };
@@ -327,4 +327,25 @@ test('network failures are understandable without masking cancellation', async (
     global.fetch = async () => { throw cancelled; };
     await assert.rejects(scheduleApi.list(7, 'token'), error => error === cancelled);
   } finally { global.fetch = originalFetch; }
+});
+
+
+test('absence lists use separate student and teacher endpoints', async () => {
+  const originalFetch = global.fetch;
+  const calls = [];
+  const entries = [{ id: 12, class_id: 7, student_id: 3, student_name: '학생', absence_date: '2026-11-12', reason: '병원', status: 'PENDING' }];
+  global.fetch = async (url, options) => { calls.push({ url, options }); return new Response(JSON.stringify({ success: true, data: entries }), { status: 200 }); };
+  try {
+    assert.deepEqual(await absenceApi.listMine(7, 'student-token'), entries);
+    assert.deepEqual(await absenceApi.listClass(7, 'teacher-token'), entries);
+    assert.equal(calls[0].url, 'http://localhost:8080/api/class/absences/7/me');
+    assert.equal(calls[0].options.headers.get('Authorization'), 'Bearer student-token');
+    assert.equal(calls[1].url, 'http://localhost:8080/api/class/absences/7');
+    assert.equal(calls[1].options.headers.get('Authorization'), 'Bearer teacher-token');
+  } finally { global.fetch = originalFetch; }
+});
+
+
+test('absence statuses distinguish pending, approval, rejection and cancellation', () => {
+  assert.deepEqual(['PENDING', 'APPROVED', 'REJECTED', 'CANCELED'].map(absenceStatusLabel), ['승인 대기', '수락됨', '거절됨', '취소됨']);
 });

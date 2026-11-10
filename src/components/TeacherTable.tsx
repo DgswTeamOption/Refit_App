@@ -1,15 +1,22 @@
 import { Image } from 'expo-image';
+import { useRef, useState } from 'react';
 import { Alert, Pressable, StyleSheet, Text, View } from 'react-native';
 
 export type TeacherActionLabel = '수정' | '삭제' | '출석' | '결석' | '승인' | '거절';
 export type TeacherCell = string | { label: string; tone: 'neutral' | 'blue' | 'red' };
 export type TeacherRow = { id: string; cells: TeacherCell[]; actions?: TeacherActionLabel[] };
-export type TeacherAction = (rowId: string, action: TeacherActionLabel) => void;
-export function TeacherTable({ headings, rows, emptyMessage, onAction }: { headings: string[]; rows: TeacherRow[]; emptyMessage: string; onAction?: TeacherAction }) {
-  function action(rowId: string, label: TeacherActionLabel) {
-    if (onAction) onAction(rowId, label);
-    else Alert.alert('준비 중', '해당 기능은 준비 중이에요.');
+export type TeacherAction = (rowId: string, action: TeacherActionLabel) => Promise<void> | void;
+export function TeacherTable({ headings, rows, emptyMessage, onAction, onRetry }: { headings: string[]; rows: TeacherRow[]; emptyMessage: string; onAction?: TeacherAction; onRetry?: () => void }) {
+  const [busy, setBusy] = useState(false);
+  const inFlight = useRef(false);
+  async function action(rowId: string, label: TeacherActionLabel) {
+    if (inFlight.current) return;
+    if (!onAction) return Alert.alert('준비 중', '해당 기능은 준비 중이에요.');
+    inFlight.current = true; setBusy(true);
+    try { await onAction(rowId, label); }
+    catch (error) { Alert.alert('처리 실패', error instanceof Error ? error.message : '다시 시도해주세요.'); }
+    finally { inFlight.current = false; setBusy(false); }
   }
-  return <><View style={styles.header}><Image source={require('../../assets/figma/schedule-header.svg')} style={StyleSheet.absoluteFill} contentFit="fill" />{headings.map(heading => <Text key={heading} style={styles.headerText}>{heading}</Text>)}</View>{rows.length ? rows.map(row => <View key={row.id} style={styles.row}><Image source={require('../../assets/figma/schedule-row.svg')} style={StyleSheet.absoluteFill} contentFit="fill" />{row.cells.map((cell, index) => <View key={index} style={styles.cell}>{typeof cell === 'string' ? <Text numberOfLines={1} style={styles.text}>{cell}</Text> : <View style={[styles.badge, styles[`${cell.tone}Badge`]]}><Text style={[styles.badgeText, styles[`${cell.tone}Text`]]}>{cell.label}</Text></View>}</View>)}{!!row.actions?.length && <View style={styles.actions}>{row.actions.map(label => <Pressable key={label} onPress={() => action(row.id, label)} style={[styles.action, (label === '출석' || label === '승인') && styles.blueAction, (label === '결석' || label === '거절') && styles.redAction]}><Text style={styles.actionText}>{label}</Text></Pressable>)}</View>}</View>) : <Text style={styles.empty}>{emptyMessage}</Text>}</>;
+  return <><View style={styles.header}><Image source={require('../../assets/figma/schedule-header.svg')} style={StyleSheet.absoluteFill} contentFit="fill" />{headings.map(heading => <Text key={heading} style={styles.headerText}>{heading}</Text>)}</View>{rows.length ? rows.map(row => <View key={row.id} style={styles.row}><Image source={require('../../assets/figma/schedule-row.svg')} style={StyleSheet.absoluteFill} contentFit="fill" />{row.cells.map((cell, index) => <View key={index} style={styles.cell}>{typeof cell === 'string' ? <Text numberOfLines={1} style={styles.text}>{cell}</Text> : <View style={[styles.badge, styles[`${cell.tone}Badge`]]}><Text style={[styles.badgeText, styles[`${cell.tone}Text`]]}>{cell.label}</Text></View>}</View>)}{!!row.actions?.length && <View style={styles.actions}>{row.actions.map(label => <Pressable key={label} disabled={busy} onPress={() => action(row.id, label)} style={[styles.action, (label === '출석' || label === '승인') && styles.blueAction, (label === '결석' || label === '거절') && styles.redAction]}><Text style={styles.actionText}>{label}</Text></Pressable>)}</View>}</View>) : <Pressable accessibilityRole={onRetry ? 'button' : undefined} disabled={!onRetry} onPress={onRetry}><Text style={styles.empty}>{emptyMessage}{onRetry ? '\n다시 시도' : ''}</Text></Pressable>}</>;
 }
 const styles = StyleSheet.create({ header: { height: 42, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12 }, headerText: { flex: 1, color: '#777', fontWeight: '700', fontSize: 12 }, row: { height: 54, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12 }, cell: { flex: 1, alignItems: 'flex-start' }, text: { color: '#444', fontSize: 12 }, badge: { borderRadius: 12, paddingHorizontal: 12, height: 24, justifyContent: 'center' }, badgeText: { fontSize: 12, fontWeight: '700' }, neutralBadge: { backgroundColor: '#f1f1f1' }, blueBadge: { backgroundColor: '#e4f3ff' }, redBadge: { backgroundColor: '#fce8e8' }, neutralText: { color: '#555' }, blueText: { color: '#3daeff' }, redText: { color: '#ff6458' }, actions: { flex: 1, flexDirection: 'row', gap: 6 }, action: { backgroundColor: '#999', borderRadius: 6, minWidth: 36, height: 20, alignItems: 'center', justifyContent: 'center' }, blueAction: { backgroundColor: '#0099ff' }, redAction: { backgroundColor: '#f04444' }, actionText: { color: '#fff', fontSize: 10, fontWeight: '700' }, empty: { color: '#777', fontSize: 12, textAlign: 'center', paddingVertical: 20, borderColor: '#eee', borderWidth: 1 } });

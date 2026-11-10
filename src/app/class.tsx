@@ -9,7 +9,7 @@ import type { TeacherRow } from '../components/TeacherTable';
 import { attendanceCalendarMarks, latestAbsenceLabel } from '../services/calendarMarks';
 import { parseServerDate } from '../services/schedule';
 import { classroomApi } from '../services/classroom';
-import { absenceApi } from '../services/absence';
+import { absenceApi, absenceStatusLabel, type AbsenceListItem } from '../services/absence';
 import { useSession } from '../auth/Session';
 import { useClasses, type RequestKind } from '../store/Classes';
 
@@ -21,6 +21,20 @@ export default function ClassPage() {
   const id = classId && /^\d+$/.test(classId) && Number(classId) > 0 ? Number(classId) : undefined;
   const localId = source === 'server' ? undefined : id;
   const token = session?.accessToken;
+  const [absenceRevision, setAbsenceRevision] = useState(0);
+  const [absenceResult, setAbsenceResult] = useState<{ token: string; id: number; teacher: boolean; revision: number; items?: AbsenceListItem[]; error?: string } | null>(null);
+  useEffect(() => {
+    if (source !== 'server' || !id || !token) return;
+    let active = true;
+    const load = teacher ? absenceApi.listClass : absenceApi.listMine;
+    load(id, token).then(items => {
+      if (!Array.isArray(items)) throw new Error('결석 신청 내역을 확인할 수 없어요.');
+      if (active) setAbsenceResult({ token, id, teacher, revision: absenceRevision, items });
+    }).catch(error => { if (active) setAbsenceResult({ token, id, teacher, revision: absenceRevision, error: error instanceof Error ? error.message : '결석 신청 내역을 불러오지 못했어요.' }); });
+    return () => { active = false; };
+  }, [source, id, token, teacher, absenceRevision]);
+  const currentAbsences = absenceResult && absenceResult.token === token && absenceResult.id === id && absenceResult.teacher === teacher && absenceResult.revision === absenceRevision ? absenceResult : null;
+  const absenceStatus = source === 'server' ? currentAbsences?.error ?? (!currentAbsences ? '결석 신청 내역을 불러오는 중이에요.' : undefined) : undefined;
   const [serverHome, setServerHome] = useState<{ token: string; id: number; name?: string; error?: string } | null>(null);
   useEffect(() => {
     if (source !== 'server' || !id || !token) return;
@@ -55,7 +69,16 @@ export default function ClassPage() {
       return { absence: { submit: async ({ date, reason }) => {
         const result = await absenceApi.create(id, date, reason, session.accessToken);
         if (!result || !Number.isSafeInteger(result.id)) throw new Error('신청 결과를 확인하지 못했어요.');
-        Alert.alert('결석 신청 완료', '신청 내역 조회 기능은 준비 중이에요.');
+        setAbsenceRevision(value => value + 1);
+        Alert.alert('결석 신청 완료', '결석 신청이 접수됐어요.');
+      }, cancel: async requestId => {
+        const absenceId = Number(requestId);
+        if (!Number.isSafeInteger(absenceId) || absenceId <= 0) throw new Error('결석 신청 정보를 확인할 수 없어요.');
+        try { await absenceApi.cancel(absenceId, session.accessToken); }
+        finally { setAbsenceRevision(value => value + 1); }
+      }, view: requestId => {
+        const item = currentAbsences?.items?.find(entry => String(entry.id) === requestId);
+        if (item) Alert.alert('신청 상세', `${item.absence_date}\n${item.reason}`);
       } } };
     }
     const make = (kind: RequestKind): StudentRequestActions => ({
@@ -63,15 +86,19 @@ export default function ClassPage() {
       cancel: async rid => cancelRequest(localId, rid),
     });
     return { absence: make('absence'), makeup: make('makeup') };
-  }, [localId, id, session, teacher, author, addRequest, cancelRequest]);
+  }, [localId, id, session, teacher, currentAbsences, author, addRequest, cancelRequest]);
 
   const studentRequests = useMemo(() => {
     const mine = (kind: RequestKind): StudentRequest[] => requests.filter(r => r.kind === kind && r.student === author).map(r => {
       const date = parseServerDate(`${r.date} 00:00:00`);
       return { id: r.id, dateLabel: date.isValid() ? date.format('M월 D일') : r.date, statusLabel: r.status === 'approved' ? '수락됨' : r.status === 'rejected' ? '거절됨' : '승인 대기', canCancel: r.status === 'pending' };
     });
-    return { absence: mine('absence'), makeup: mine('makeup') };
-  }, [requests, author]);
+    const serverAbsences: StudentRequest[] = (currentAbsences?.items ?? []).map(item => {
+      const date = parseServerDate(`${item.absence_date} 00:00:00`);
+      return { id: String(item.id), dateLabel: date.isValid() ? date.format('M월 D일') : item.absence_date, statusLabel: absenceStatusLabel(item.status), canCancel: item.status === 'PENDING' };
+    });
+    return { absence: source === 'server' ? serverAbsences : mine('absence'), makeup: mine('makeup') };
+  }, [requests, author, currentAbsences, source]);
 
   const teacherRows = useMemo<Partial<Record<TeacherTab, TeacherRow[]>>>(() => {
     const absences = requests.filter(r => r.kind === 'absence');
@@ -92,13 +119,27 @@ export default function ClassPage() {
     };
   }, [requests, availability, members, attendance, today]);
 
-  const calendarMarks = useMemo(() => attendanceCalendarMarks(requests, attendance, teacher, author), [requests, attendance, teacher, author]);
+  const calendarMarks = useMemo(() => {
+    const localMarks = attendanceCalendarMarks(requests, attendance, teacher, author);
+    if (source !== 'server') return localMarks;
+    for (const item of currentAbsences?.items ?? []) {
+      if (item.status === 'APPROVED' && /^\d{4}-\d{2}-\d{2}$/.test(item.absence_date)) localMarks[item.absence_date] = ['absence'];
+    }
+    return localMarks;
+  }, [requests, attendance, teacher, author, source, currentAbsences]);
+  const serverTeacherRows: Partial<Record<TeacherTab, TeacherRow[]>> = { ...teacherRows, 결석정보: (currentAbsences?.items ?? []).map(item => ({ id: String(item.id), cells: [item.student_name || `학생 #${item.student_id}`, item.absence_date, item.reason, item.status === 'APPROVED' ? { label: '승인', tone: 'blue' as const } : item.status === 'REJECTED' ? { label: '거절', tone: 'red' as const } : { label: item.status === 'CANCELED' ? '취소' : '대기중', tone: 'neutral' as const }], actions: item.status === 'PENDING' ? ['승인' as const, '거절' as const] : undefined })) };
 
   return <ClassScreen
     role={teacher ? 'teacher' : 'student'} name={currentHome?.name || name || '수업'} classId={id} loadError={currentHome?.error}
     notices={localId === undefined ? [] : store.noticesOf(localId)} noticeActions={noticeActions}
-    studentRequests={studentRequests} requestActions={requestActions} teacherRows={teacherRows} serverDataUnavailable={localId === undefined}
-    onTeacherAction={localId === undefined ? undefined : (tab, rowId, action) => {
+    studentRequests={studentRequests} requestActions={requestActions} teacherRows={source === 'server' ? serverTeacherRows : teacherRows} serverDataUnavailable={localId === undefined} absenceStatus={absenceStatus} onRetryAbsences={currentAbsences?.error ? () => setAbsenceRevision(value => value + 1) : undefined}
+    onTeacherAction={localId === undefined ? (source === 'server' && teacher && token ? async (tab, rowId, action) => {
+      if (tab !== '결석정보' || (action !== '승인' && action !== '거절')) throw new Error('해당 기능은 준비 중이에요.');
+      const absenceId = Number(rowId);
+      if (!Number.isSafeInteger(absenceId) || absenceId <= 0) throw new Error('결석 신청 정보를 확인할 수 없어요.');
+      try { await (action === '승인' ? absenceApi.approve(absenceId, token) : absenceApi.reject(absenceId, token)); }
+      finally { setAbsenceRevision(value => value + 1); }
+    } : undefined) : (tab, rowId, action) => {
       if (tab === '보강설정' && action === '삭제') removeAvailability(localId, rowId);
       else if ((tab === '결석정보' || tab === '보강') && (action === '승인' || action === '거절')) setRequestStatus(localId, rowId, action === '승인' ? 'approved' : 'rejected');
       else if (tab === '출석' && (action === '출석' || action === '결석')) markAttendance(localId, rowId, today, action === '출석' ? 'present' : 'absent');
