@@ -2,7 +2,7 @@ import { Image } from 'expo-image';
 import { useEffect, useMemo, useState } from 'react';
 import { Alert, Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSession, type Session } from '../auth/Session';
-import { parseServerDate, scheduleAccessibility, scheduleApi, type Schedule, type ScheduleInput } from '../services/schedule';
+import { parseServerDate, scheduleAccessibility, scheduleApi, validateScheduleList, type Schedule, type ScheduleInput } from '../services/schedule';
 import { DateTimeField } from './DateTimeField';
 import { TimeRangeField } from './TimeRangeField';
 
@@ -24,7 +24,8 @@ export function ScheduleManagement({ classId, registration, onRegisterChange, st
     if (localMode || !session || !classId) return;
     let active = true;
     scheduleApi.list(classId, session.accessToken).then(data => {
-      if (active) setResult({ session, classId, revision, schedules: data ?? [] });
+      const schedules = validateScheduleList(data, classId);
+      if (active) setResult({ session, classId, revision, schedules });
     }).catch(e => { if (active) setResult({ session, classId, revision, error: e instanceof Error ? e.message : '일정을 불러오지 못했어요.' }); });
     return () => { active = false; };
   }, [classId, session, revision, localMode]);

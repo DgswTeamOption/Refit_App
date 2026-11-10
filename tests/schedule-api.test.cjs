@@ -16,7 +16,7 @@ const originalApiUrl = process.env.EXPO_PUBLIC_API_URL;
 delete process.env.EXPO_PUBLIC_API_URL;
 const http = loadTypeScript('src/services/http.ts', { 'react-native': { Platform: { OS: 'ios' } } });
 if (originalApiUrl !== undefined) process.env.EXPO_PUBLIC_API_URL = originalApiUrl;
-const { scheduleApi, parseServerDate, scheduleDates, studentScheduleDates, scheduleAccessibility } = loadTypeScript('src/services/schedule.ts', { './http': http });
+const { scheduleApi, parseServerDate, scheduleDates, studentScheduleDates, scheduleAccessibility, validateScheduleList } = loadTypeScript('src/services/schedule.ts', { './http': http });
 const { emailApi } = loadTypeScript('src/services/email.ts', { './http': http });
 const { notificationApi } = loadTypeScript('src/services/notification.ts', { './http': http });
 const { absenceApi, absenceRequest, absenceStatusLabel, isPastAbsenceDate, validateAbsenceList } = loadTypeScript('src/services/absence.ts', { './http': http });
@@ -44,6 +44,15 @@ test('student calendar includes only the selected student’s schedules', () => 
   ];
   assert.deepEqual(studentScheduleDates(schedules, 1), ['2026-08-01']);
   assert.deepEqual(studentScheduleDates(schedules, undefined), []);
+});
+
+test('schedule lists reject malformed responses and schedules from another class', () => {
+  const item = { scheduleId: 1, classId: 7, studentId: 3, startTime: '2026-11-10 09:00:00', endTime: '2026-11-10 10:00:00' };
+  assert.deepEqual(validateScheduleList([item], 7), [item]);
+  assert.deepEqual(validateScheduleList([], 7), []);
+  assert.throws(() => validateScheduleList(undefined, 7));
+  assert.throws(() => validateScheduleList([{ ...item, classId: 8 }], 7));
+  assert.throws(() => validateScheduleList([{ ...item, studentId: null }], 7));
 });
 
 test('schedule requests use bearer authentication and server field names', async () => {

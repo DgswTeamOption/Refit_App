@@ -7,6 +7,15 @@ export const serverDateFormat = 'YYYY-MM-DD HH:mm:ss';
 export const parseServerDate = (value: string) => dayjs(value, serverDateFormat, true);
 export type Schedule = { scheduleId: number; classId: number; studentId: number; startTime: string; endTime: string };
 export type ScheduleInput = { studentId: number; startTime: string; endTime: string };
+export function validateScheduleList(value: unknown, classId: number): Schedule[] {
+  if (!Array.isArray(value) || !value.every(item => item && typeof item === 'object'
+    && Number.isSafeInteger(item.scheduleId) && item.scheduleId > 0 && item.classId === classId
+    && Number.isSafeInteger(item.studentId) && item.studentId > 0
+    && typeof item.startTime === 'string' && typeof item.endTime === 'string')) {
+    throw new Error('수업 일정을 확인할 수 없어요.');
+  }
+  return value as Schedule[];
+}
 export function scheduleAccessibility(startTime: string, endTime: string): string {
   const start = parseServerDate(startTime);
   const end = parseServerDate(endTime);
