@@ -2,7 +2,7 @@ import { router } from 'expo-router';
 import { createContext, useContext, useEffect, useMemo, useRef, useState, type Dispatch, type ReactNode, type SetStateAction } from 'react';
 import { onUnauthorized } from '../services/http';
 
-export type Session = { accessToken: string; refreshToken: string; user: { id: number; name: string; role: 'STUDENT' | 'TEACHER' } };
+export type Session = { accessToken: string; refreshToken: string; user: { id: number; name: string; role: 'STUDENT' | 'TEACHER'; profileImageUrl?: string | null } };
 export type SignupDraft = { name: string; email: string; role: 'STUDENT' | 'TEACHER'; verificationCode: string; expiresAt: number };
 export type LocalUser = { name: string; email: string; role: 'STUDENT' | 'TEACHER' };
 type SessionContextValue = { localUser: LocalUser | null; setLocalUser: (user: LocalUser | null) => void; session: Session | null; setSession: Dispatch<SetStateAction<Session | null>>; signupDraft: SignupDraft | null; setSignupDraft: (draft: SignupDraft | null) => void; pendingGoogleToken: string | null; setPendingGoogleToken: (token: string | null) => void };

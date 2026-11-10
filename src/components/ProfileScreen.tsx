@@ -5,11 +5,12 @@ import { router } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { Alert, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useInitial, useSession, type Session } from '../auth/Session';
+import { useSession, type Session } from '../auth/Session';
 import { emailApi } from '../services/email';
 import { baseUrl } from '../services/http';
 import { userApi, type UserProfile } from '../services/user';
 import { useClasses } from '../store/Classes';
+import { ProfileAvatar } from './ProfileAvatar';
 
 type Page = 'view' | 'edit' | 'delete';
 type ProfileProps = { page: Page; notifications?: NotificationItem[]; notificationActions?: NotificationActions };
@@ -21,7 +22,6 @@ export function ProfileScreen(props: ProfileProps) {
 function ProfileBody({ page, notifications, notificationActions }: ProfileProps) {
   const { session, setSession, localUser, setLocalUser } = useSession();
   const local = !session ? localUser : null;
-  const initial = useInitial();
   const [result, setResult] = useState<{ session: Session; profile?: UserProfile; error?: string } | null>(null);
   const current = result?.session === session ? result : null;
   const profile = current?.profile ?? null;
@@ -37,9 +37,10 @@ function ProfileBody({ page, notifications, notificationActions }: ProfileProps)
       if (!active) return;
       if (!user) throw new Error('프로필 정보를 확인할 수 없어요.');
       setResult({ session, profile: user }); setName(user.name);
+      setSession(current => current?.accessToken === session.accessToken && current.user.profileImageUrl !== user.profileImageUrl ? { ...current, user: { ...current.user, profileImageUrl: user.profileImageUrl } } : current);
     }).catch(e => { if (active) setResult({ session, error: e instanceof Error ? e.message : '프로필을 불러오지 못했어요.' }); });
     return () => { active = false; };
-  }, [session]);
+  }, [session, setSession]);
   async function save() {
     const nextName = name.trim();
     if (!nextName || nextName.length > 50) return Alert.alert('이름은 1~50자로 입력해주세요.');
@@ -64,6 +65,7 @@ function ProfileBody({ page, notifications, notificationActions }: ProfileProps)
       setBusy(true);
       const uploaded = await userApi.upload(asset, session.accessToken);
       await userApi.updateImage(uploaded.imageUrl, session.accessToken);
+      setSession(current => current?.accessToken === session.accessToken ? { ...current, user: { ...current.user, profileImageUrl: uploaded.imageUrl } } : current);
       const updated = await userApi.get(session.user.id, session.accessToken);
       if (updated) setResult({ session, profile: updated });
     } catch (e) { Alert.alert('사진 변경 실패', e instanceof Error ? e.message : '다시 시도해주세요.'); }
@@ -102,7 +104,7 @@ function ProfileBody({ page, notifications, notificationActions }: ProfileProps)
   const imageUri = photo && (photo.startsWith('/') ? `${baseUrl}${photo}` : photo);
   const heading = page === 'view' ? '내 정보' : page === 'edit' ? '정보 수정' : '정말 탈퇴하시겠어요?';
   return <SafeAreaView edges={['top', 'bottom']} style={styles.safe}>
-    <View style={styles.header}><Pressable onPress={() => router.replace({ pathname: '/home', params: { role: (session?.user.role ?? localUser?.role) === 'TEACHER' ? 'teacher' : 'student' } })}><Image source={require('../../assets/figma/logo.svg')} style={styles.logo} contentFit="contain" accessibilityLabel="홈" /></Pressable><View style={styles.headerRight}><NotificationBell items={notifications} actions={notificationActions} /><View style={styles.avatar}><Image source={require('../../assets/figma/avatar.svg')} style={StyleSheet.absoluteFill} contentFit="contain" /><Text style={styles.avatarText}>{initial}</Text></View></View></View>
+    <View style={styles.header}><Pressable onPress={() => router.replace({ pathname: '/home', params: { role: (session?.user.role ?? localUser?.role) === 'TEACHER' ? 'teacher' : 'student' } })}><Image source={require('../../assets/figma/logo.svg')} style={styles.logo} contentFit="contain" accessibilityLabel="홈" /></Pressable><View style={styles.headerRight}><NotificationBell items={notifications} actions={notificationActions} /><ProfileAvatar /></View></View>
     <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
       <Text style={styles.heading}>{heading}</Text><Image source={require('../../assets/figma/policy-divider.svg')} style={styles.divider} contentFit="fill" />
       {!session && !local && <Text style={styles.notice}>로그인 후 내 정보를 확인할 수 있어요.</Text>}

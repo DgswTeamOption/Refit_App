@@ -19,7 +19,7 @@ if (originalApiUrl !== undefined) process.env.EXPO_PUBLIC_API_URL = originalApiU
 const { scheduleApi, parseServerDate, scheduleDates, studentScheduleDates } = loadTypeScript('src/services/schedule.ts', { './http': http });
 const { emailApi } = loadTypeScript('src/services/email.ts', { './http': http });
 const { userApi } = loadTypeScript('src/services/user.ts', { './http': http, 'react-native': { Platform: { OS: 'ios' } } });
-const fakeProfile = { id: 42, name: '민지', role: 'STUDENT' };
+const fakeProfile = { id: 42, name: '민지', role: 'STUDENT', profileImageUrl: null };
 const fakeUserApi = { get: async (id, token) => { assert.equal(id, 42); assert.ok(token); return fakeProfile; } };
 const { authApi, emailSession, googleSession, GoogleUserNotRegistered } = loadTypeScript('src/services/auth.ts', { './http': http, './user': { userApi: fakeUserApi } });
 

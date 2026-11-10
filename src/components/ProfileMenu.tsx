@@ -1,18 +1,17 @@
-import { Image } from 'expo-image';
 import { router } from 'expo-router';
 import { useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
-import { useInitial, useSession } from '../auth/Session';
+import { useSession } from '../auth/Session';
+import { ProfileAvatar } from './ProfileAvatar';
 
 export function ProfileMenu() {
   const [open, setOpen] = useState(false);
-  const initial = useInitial();
   const { session, localUser, setSession, setLocalUser } = useSession();
   const name = session?.user.name ?? localUser?.name ?? '';
 
   return <View style={styles.anchor}>
     <Pressable accessibilityRole="button" accessibilityLabel="프로필 메뉴" accessibilityState={{ expanded: open }} onPress={() => setOpen(value => !value)} style={styles.avatar}>
-      <Image source={require('../../assets/figma/avatar.svg')} style={StyleSheet.absoluteFill} contentFit="contain" /><Text style={styles.initial}>{initial}</Text>
+      <ProfileAvatar />
     </Pressable>
     {open && <View style={styles.menu}>
       <Text style={styles.name} numberOfLines={1}>{name}</Text>

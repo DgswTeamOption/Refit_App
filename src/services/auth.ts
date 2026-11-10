@@ -37,7 +37,7 @@ async function sessionFromTokens(tokens: TokenResponse | undefined): Promise<Ses
   if (typeof claims.userId !== 'number' || !Number.isSafeInteger(claims.userId) || claims.userId <= 0 || (claims.role !== 'STUDENT' && claims.role !== 'TEACHER')) throw new Error('로그인 사용자 정보를 확인할 수 없어요.');
   const profile = await userApi.get(claims.userId, tokens.accessToken);
   if (!profile || profile.id !== claims.userId || profile.role !== claims.role) throw new Error('프로필 정보를 확인할 수 없어요.');
-  return { ...tokens, user: { id: profile.id, name: profile.name, role: profile.role } };
+  return { ...tokens, user: { id: profile.id, name: profile.name, role: profile.role, profileImageUrl: profile.profileImageUrl ?? null } };
 }
 
 export async function googleSession(idToken: string): Promise<Session> {
