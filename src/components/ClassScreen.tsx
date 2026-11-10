@@ -1,11 +1,11 @@
 import { Image } from 'expo-image';
-import { useInitial } from '../auth/Session';
 import { NotificationBell, type NotificationActions, type NotificationItem } from './NotificationBell';
 import { router } from 'expo-router';
 import { useState } from 'react';
 import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Calendar, type CalendarMarks } from './Calendar';
+import { ProfileMenu } from './ProfileMenu';
 import { StudentRequests, type StudentRequest, type StudentRequestActions } from './StudentRequests';
 import { TeacherManagement, type TeacherTab, type AvailabilityInput, type AvailabilityItem } from './TeacherManagement';
 import { TeacherTable, type TeacherRow, type TeacherActionLabel } from './TeacherTable';
@@ -37,7 +37,6 @@ type ClassScreenProps = {
   onCreateLocalSchedule?: (input: ScheduleInput) => void;
 };
 export function ClassScreen({ role, name, classId, notices = [], noticeActions, teacherRows, onTeacherAction, studentRequests, requestActions, notifications, notificationActions, calendarMarks, scheduleStudents, availability, onSaveAvailability, attendanceRows, attendanceSummary, onNfc, localSchedules, onCreateLocalSchedule }: ClassScreenProps) {
-  const initial = useInitial();
   const [tab, setTab] = useState('메인');
   const [registering, setRegistering] = useState(false);
   const [addingAvailability, setAddingAvailability] = useState(false);
@@ -60,7 +59,7 @@ export function ClassScreen({ role, name, classId, notices = [], noticeActions, 
     else Alert.alert('준비 중', `${next} 화면은 준비 중이에요.`);
   }
   return <SafeAreaView edges={['top', 'bottom']} style={styles.safe}>
-    <View style={styles.header}><Image source={require('../../assets/figma/logo.svg')} style={styles.logo} contentFit="contain" accessibilityLabel="Refit" /><View style={styles.headerActions}><NotificationBell items={notifications} actions={notificationActions} /><Pressable onPress={() => router.push('/profile')} accessibilityLabel="내 정보" style={styles.avatar}><Image source={require('../../assets/figma/avatar.svg')} style={StyleSheet.absoluteFill} contentFit="contain" /><Text style={styles.avatarText}>{initial}</Text></Pressable></View></View>
+    <View style={styles.header}><Image source={require('../../assets/figma/logo.svg')} style={styles.logo} contentFit="contain" accessibilityLabel="Refit" /><View style={styles.headerActions}><NotificationBell items={notifications} actions={notificationActions} /><ProfileMenu /></View></View>
     <ScrollView contentContainerStyle={styles.content}>
       <View style={styles.classHeading}><Pressable onPress={() => notice ? setNotice(notice === 'list' ? null : 'list') : registering ? setRegistering(false) : addingAvailability ? setAddingAvailability(false) : router.replace({ pathname: '/home', params: { role } })}><Text style={styles.back}>{notice ? (notice === 'list' ? '‹ 수업으로 돌아가기' : '‹ 공지 목록으로 돌아가기') : registering ? '‹ 스케줄 관리로 돌아가기' : addingAvailability ? '‹ 보강설정으로 돌아가기' : '‹ 홈으로 돌아가기'}</Text></Pressable><Text style={styles.crumb}><Text style={styles.crumbLink}>홈</Text>  ›  <Text style={styles.crumbLink}>{name}</Text>  ›  {notice ? ({ list: '공지 목록', write: '공지 작성', view: '수업 공지', edit: '공지 수정', delete: '공지 삭제 확인' }[notice]) : registering ? '학생 시간표 등록' : addingAvailability ? '보강 가능 시간 추가' : requestForm ? (tab === '결석 일정' ? '결석 신청' : '보강 신청') : tab === '메인' ? '수업 홈' : tab}</Text><View style={styles.titleRow}><Text style={styles.title}>{name}</Text>{notice === 'list' && teacher && <Pressable style={styles.noticeAdd} onPress={() => setNotice('write')}><Text style={styles.noticeAddText}>+ 공지하기</Text></Pressable>}</View></View>
       <View style={styles.tabs}><Image source={require('../../assets/figma/class-tabs.svg')} style={StyleSheet.absoluteFill} contentFit="fill" /><ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.tabRow}>{tabs.map(item => <Pressable key={item} onPress={() => selectTab(item)} style={[styles.tab, tab === item && styles.activeTab]}><Text style={[styles.tabText, tab === item && styles.activeText]}>{item}</Text></Pressable>)}</ScrollView></View>

@@ -1,12 +1,12 @@
 import { Image } from 'expo-image';
 import * as ImagePicker from 'expo-image-picker';
 import { useEffect, useState } from 'react';
-import { useInitial, useSession, type Session } from '../auth/Session';
+import { useSession, type Session } from '../auth/Session';
 import { scheduleDates, scheduleApi } from '../services/schedule';
-import { router } from 'expo-router';
 import { Calendar, type CalendarMarks, type ClassCalendarColor } from './Calendar';
 import { NotificationBell, type NotificationActions, type NotificationItem } from './NotificationBell';
 import { ClassCards, type ClassSummary } from './ClassCards';
+import { ProfileMenu } from './ProfileMenu';
 import { Alert, Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
@@ -14,7 +14,6 @@ type Role = 'student' | 'teacher';
 
 export function HomeScreen({ role, classes = [], notifications, notificationActions, onSubmitClass, onRemoveClass }: { role: Role; classes?: ClassSummary[]; notifications?: NotificationItem[]; notificationActions?: NotificationActions; onSubmitClass?: (value: string, bannerUri?: string) => void; onRemoveClass?: (item: ClassSummary) => void }) {
   const { session } = useSession();
-  const initial = useInitial();
   const [month, setMonth] = useState(() => { const now = new Date(); return new Date(now.getFullYear(), now.getMonth(), 1); });
   const [calendarResult, setCalendarResult] = useState<{ session: Session; ids: string; monthKey: string; dates: Record<number, string[]> } | null>(null);
   const [modalVisible, setModalVisible] = useState(false);
@@ -67,7 +66,7 @@ export function HomeScreen({ role, classes = [], notifications, notificationActi
   return <SafeAreaView edges={['top', 'bottom']} style={styles.safe}>
     <View style={styles.header}>
       <Image source={require('../../assets/figma/logo.svg')} style={styles.logo} contentFit="contain" accessibilityLabel="Refit" />
-      <View style={styles.actions}><NotificationBell items={notifications} actions={notificationActions} /><Pressable accessibilityRole="button" accessibilityLabel="프로필" onPress={() => router.push('/profile')} style={styles.avatar}><Image source={require('../../assets/figma/avatar.svg')} style={StyleSheet.absoluteFill} contentFit="contain" /><Text style={styles.avatarText}>{initial}</Text></Pressable></View>
+      <View style={styles.actions}><NotificationBell items={notifications} actions={notificationActions} /><ProfileMenu /></View>
     </View>
     <ScrollView contentContainerStyle={styles.content}>
       <Calendar marks={calendarMarks} classLegend={classLegend} month={month} onMonthChange={setMonth} />

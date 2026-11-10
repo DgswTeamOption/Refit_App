@@ -11,10 +11,10 @@ import { useSession } from '../auth/Session';
 import { useClasses, type RequestKind } from '../store/Classes';
 
 export default function ClassPage() {
-  const { role, name, classId, source } = useLocalSearchParams<{ role?: string; name?: string; classId?: string; source?: string }>();
+  const { name, classId, source } = useLocalSearchParams<{ name?: string; classId?: string; source?: string }>();
   const { session, localUser } = useSession();
   const store = useClasses();
-  const teacher = role === 'teacher';
+  const teacher = (session?.user.role ?? localUser?.role) === 'TEACHER';
   const id = classId && /^\d+$/.test(classId) && Number(classId) > 0 ? Number(classId) : undefined;
   const localId = source === 'server' ? undefined : id;
   const author = session?.user.name ?? localUser?.name ?? (teacher ? '선생님' : '학생');

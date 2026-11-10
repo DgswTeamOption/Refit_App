@@ -71,7 +71,8 @@ function ProfileBody({ page, notifications, notificationActions }: ProfileProps)
   }
   async function beginRemoval() {
     if (local) { router.push('/profile-delete'); return; }
-    if (!session || !profile) { router.push('/profile-delete'); return; }
+    if (!session) return Alert.alert('로그인이 필요해요.');
+    if (!profile) return Alert.alert('프로필 정보를 먼저 불러와야 해요.');
     setBusy(true);
     try {
       const result = await emailApi.sendCode(profile.emailId);
@@ -110,7 +111,7 @@ function ProfileBody({ page, notifications, notificationActions }: ProfileProps)
         <Pressable accessibilityRole="button" disabled={busy} onPress={changePhoto} style={styles.photoArea}><View style={styles.photoLarge}><Image source={imageUri ? { uri: imageUri } : require('../../assets/figma/profile-photo.svg')} style={StyleSheet.absoluteFill} contentFit="cover" />{!imageUri && <Text style={styles.photoPlaceholder}>사진</Text>}</View><Text style={styles.photoLink}>프로필 사진 변경</Text></Pressable>
         <View style={styles.info}><Text style={styles.infoLabel}>이름</Text><Text style={styles.infoValue}>{profile?.name ?? local?.name ?? '—'}</Text><Image source={require('../../assets/figma/policy-divider.svg')} style={styles.infoDivider} contentFit="fill" /></View>
         <View style={styles.info}><Text style={styles.infoLabel}>이메일</Text><Text style={[styles.infoValue, styles.email]}>{profile?.emailId ?? local?.email ?? '—'}</Text><Image source={require('../../assets/figma/policy-divider.svg')} style={styles.infoDivider} contentFit="fill" /></View>
-        <Pressable style={styles.neutralButton} onPress={() => router.push('/profile-edit')}><Text style={styles.neutralText}>정보 수정</Text></Pressable><Pressable onPress={() => { setSession(null); setLocalUser(null); router.replace('/'); }}><Text style={styles.logout}>로그아웃</Text></Pressable><Pressable disabled={busy} onPress={beginRemoval}><Text style={styles.deleteLink}>계정 삭제</Text></Pressable>
+        <Pressable style={styles.neutralButton} onPress={() => router.push('/profile-edit')}><Text style={styles.neutralText}>정보 수정</Text></Pressable><Pressable disabled={busy} onPress={beginRemoval}><Text style={styles.deleteLink}>계정 삭제</Text></Pressable>
       </> : page === 'edit' ? <>
         <Text style={styles.label}>프로필 사진</Text><Pressable onPress={changePhoto} disabled={busy} style={styles.editPhoto}><Image source={imageUri ? { uri: imageUri } : require('../../assets/figma/edit-photo.svg')} style={StyleSheet.absoluteFill} contentFit="cover" />{!imageUri && <Text style={styles.editPhotoText}>사진 변경</Text>}</Pressable>
         <Text style={styles.label}>이름</Text><TextInput accessibilityLabel="이름" value={profile || local ? name : ''} onChangeText={setName} maxLength={50} placeholder="이름" placeholderTextColor="#999" style={styles.input} />

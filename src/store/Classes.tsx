@@ -17,7 +17,7 @@ export type StoredAvailability = { id: string; date: string; startTime: string; 
 export type StoredNotification = { id: string; title: string; body: string; read: boolean };
 type Value = {
   teacherClasses: StoredClass[];
-  studentClasses: StoredClass[];
+  studentClasses: Omit<StoredClass, 'code'>[];
   createClass: (name: string, bannerUrl?: string | null) => StoredClass;
   joinClass: (code: string, student?: string) => StoredClass;
   deleteClass: (id: number) => void;
@@ -147,7 +147,7 @@ export function ClassesProvider({ children }: { children: ReactNode }) {
     setSchedules(prev => ({ ...prev, [classId]: [...(prev[classId] ?? []), { ...input, classId, scheduleId: uid() }] }));
   }, [setSchedules]);
   const markAllRead = useCallback(() => setNotifications(prev => prev.map(n => ({ ...n, read: true }))), [setNotifications]);
-  const studentClasses = useMemo(() => classes.filter(c => joined.includes(c.id)), [classes, joined]);
+  const studentClasses = useMemo(() => classes.filter(c => joined.includes(c.id)).map(({ code: _code, ...item }) => item), [classes, joined]);
   const value = useMemo(() => ({ teacherClasses: classes, studentClasses, createClass, joinClass, deleteClass, leaveClass, noticesOf, addNotice, updateNotice, removeNotice, schedulesOf, addSchedule, requestsOf, addRequest, setRequestStatus, membersOf, studentOptionsOf, attendanceOf, markAttendance, cancelRequest, availabilityOf, addAvailability, updateAvailability, removeAvailability, notifications, markAllRead }), [classes, studentClasses, createClass, joinClass, deleteClass, leaveClass, noticesOf, addNotice, updateNotice, removeNotice, schedulesOf, addSchedule, requestsOf, addRequest, setRequestStatus, membersOf, studentOptionsOf, attendanceOf, markAttendance, cancelRequest, availabilityOf, addAvailability, updateAvailability, removeAvailability, notifications, markAllRead]);
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }
