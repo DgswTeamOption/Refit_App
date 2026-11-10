@@ -28,9 +28,9 @@ export default function Home() {
       if (active) setResult({ token, items: items.map(item => toSummary(item, teacher)) });
     }).catch(error => {
       if (!active) return;
-      const message = error instanceof ApiError && error.status === 404
-        ? '현재 수업이 없습니다.'
-        : error instanceof Error ? error.message : '수업 목록을 불러오지 못했어요.';
+      // 404 means the account has no classes yet: show the normal empty state, not a retry prompt.
+      if (error instanceof ApiError && error.status === 404) { setResult({ token, items: [] }); return; }
+      const message = error instanceof Error ? error.message : '수업 목록을 불러오지 못했어요.';
       setResult(previous => ({ token, items: previous?.token === token ? previous.items : undefined, error: message }));
     });
     return () => { active = false; };
