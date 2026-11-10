@@ -173,6 +173,21 @@ test('Google server requests time out with a retry message', async () => {
   } finally { global.fetch = originalFetch; }
 });
 
+test('Google profile lookup timeout does not become a signup request', async () => {
+  const originalFetch = global.fetch;
+  const originalSetTimeout = global.setTimeout;
+  const accessToken = `e30.${Buffer.from(JSON.stringify({ userId: 42, role: 'STUDENT' })).toString('base64url')}.signature`;
+  const delayedUserApi = { get: (_id, _token, signal) => new Promise((_resolve, reject) => {
+    signal.addEventListener('abort', () => reject(new Error('aborted')));
+  }) };
+  const delayedAuth = loadTypeScript('src/services/auth.ts', { './http': http, './user': { userApi: delayedUserApi } });
+  global.setTimeout = (callback, ms, ...args) => originalSetTimeout(callback, Math.min(ms, 5), ...args);
+  global.fetch = async () => new Response(JSON.stringify({ success: true, data: { accessToken, refreshToken: 'refresh' } }), { status: 200 });
+  try {
+    await assert.rejects(delayedAuth.googleSession('google-id-token'), error => !(error instanceof delayedAuth.GoogleUserNotRegistered) && /프로필 조회가 지연/.test(error.message));
+  } finally { global.fetch = originalFetch; global.setTimeout = originalSetTimeout; }
+});
+
 test('email registration and login submit the verification code directly to auth', async () => {
   const originalFetch = global.fetch;
   const calls = [];
