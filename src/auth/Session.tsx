@@ -1,6 +1,8 @@
 import { router } from 'expo-router';
 import { createContext, useContext, useEffect, useMemo, useRef, useState, type Dispatch, type ReactNode, type SetStateAction } from 'react';
 import { onUnauthorized } from '../services/http';
+import { ActivityIndicator, View } from 'react-native';
+import { readStoredSession, writeStoredSession } from './sessionStorage';
 
 export type Session = { accessToken: string; refreshToken: string; user: { id: number; name: string; role: 'STUDENT' | 'TEACHER'; profileImageUrl?: string | null } };
 export type SignupDraft = { name: string; email: string; role: 'STUDENT' | 'TEACHER'; verificationCode: string; expiresAt: number };
@@ -10,11 +12,22 @@ const SessionContext = createContext<SessionContextValue | null>(null);
 
 export function SessionProvider({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<Session | null>(null);
+  const [hydrated, setHydrated] = useState(false);
+  const storageQueue = useRef<Promise<void>>(Promise.resolve());
   // UI-only user carries no token, so no server calls are made with it.
   const [localUser, setLocalUser] = useState<LocalUser | null>(null);
   const [signupDraft, setSignupDraft] = useState<SignupDraft | null>(null);
   const [pendingGoogleToken, setPendingGoogleToken] = useState<string | null>(null);
   const currentSession = useRef<Session | null>(null);
+  useEffect(() => {
+    let active = true;
+    readStoredSession().then(value => { if (active && value) setSession(value); }).catch(() => {}).finally(() => { if (active) setHydrated(true); });
+    return () => { active = false; };
+  }, []);
+  useEffect(() => {
+    if (!hydrated) return;
+    storageQueue.current = storageQueue.current.then(() => writeStoredSession(session)).catch(() => {});
+  }, [hydrated, session]);
   useEffect(() => { currentSession.current = session; }, [session]);
   useEffect(() => onUnauthorized(token => {
     if (currentSession.current?.accessToken !== token) return;
@@ -23,6 +36,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     router.replace('/');
   }), []);
   const value = useMemo(() => ({ localUser, setLocalUser, session, setSession, signupDraft, setSignupDraft, pendingGoogleToken, setPendingGoogleToken }), [localUser, session, signupDraft, pendingGoogleToken]);
+  if (!hydrated) return <View style={{ flex: 1, backgroundColor: '#fff', justifyContent: 'center' }}><ActivityIndicator color="#0099ff" /></View>;
   return <SessionContext.Provider value={value}>{children}</SessionContext.Provider>;
 }
 export function useSession() {
