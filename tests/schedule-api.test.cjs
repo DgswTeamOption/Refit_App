@@ -18,6 +18,7 @@ const http = loadTypeScript('src/services/http.ts', { 'react-native': { Platform
 if (originalApiUrl !== undefined) process.env.EXPO_PUBLIC_API_URL = originalApiUrl;
 const { scheduleApi, parseServerDate, scheduleDates, studentScheduleDates } = loadTypeScript('src/services/schedule.ts', { './http': http });
 const { emailApi } = loadTypeScript('src/services/email.ts', { './http': http });
+const { absenceApi } = loadTypeScript('src/services/absence.ts', { './http': http });
 const { classroomApi, classroomRequest, ClassroomTimeoutError } = loadTypeScript('src/services/classroom.ts', { './http': http });
 const { userApi } = loadTypeScript('src/services/user.ts', { './http': http, 'react-native': { Platform: { OS: 'ios' } } });
 const fakeProfile = { id: 42, name: '민지', role: 'STUDENT', profileImageUrl: null };
@@ -250,5 +251,30 @@ test('classroom requests stop waiting and distinguish unknown write outcomes', a
   try {
     await assert.rejects(classroomRequest('/api/class', {}, 'token', 5), error => error instanceof ClassroomTimeoutError && error.message.includes('서버 응답'));
     await assert.rejects(classroomRequest('/api/class', { method: 'POST' }, 'token', 5), error => error instanceof ClassroomTimeoutError && error.message.includes('수업 목록'));
+  } finally { global.fetch = originalFetch; }
+});
+
+
+test('absence requests use the server date field and authenticated action endpoints', async () => {
+  const originalFetch = global.fetch;
+  const calls = [];
+  const result = { id: 10, class_id: 7, student_id: 3, absence_date: '2026-11-12', reason: '병원', status: 'PENDING' };
+  global.fetch = async (url, options) => {
+    calls.push({ url, options });
+    return new Response(JSON.stringify({ success: true, data: result }), { status: options.method === 'POST' ? 201 : 200 });
+  };
+  try {
+    assert.deepEqual(await absenceApi.create(7, '2026-11-12', '병원', 'token'), result);
+    await absenceApi.approve(10, 'token');
+    await absenceApi.reject(10, 'token');
+    await absenceApi.cancel(10, 'token');
+    assert.equal(calls[0].url, 'http://localhost:8080/api/class/absences/7');
+    assert.equal(calls[0].options.headers.get('Authorization'), 'Bearer token');
+    assert.deepEqual(JSON.parse(calls[0].options.body), { absence_date: '2026-11-12', reason: '병원' });
+    assert.equal(calls[1].url, 'http://localhost:8080/api/class/absences/10/approve');
+    assert.equal(calls[1].options.method, 'PATCH');
+    assert.equal(calls[2].url, 'http://localhost:8080/api/class/absences/10/reject');
+    assert.equal(calls[3].options.method, 'DELETE');
+    assert.equal(calls[3].url, 'http://localhost:8080/api/class/absences/10');
   } finally { global.fetch = originalFetch; }
 });

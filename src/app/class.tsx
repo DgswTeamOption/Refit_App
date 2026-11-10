@@ -1,4 +1,5 @@
 import { useLocalSearchParams } from 'expo-router';
+import { Alert } from 'react-native';
 import { useEffect, useMemo, useState } from 'react';
 import { ClassScreen } from '../components/ClassScreen';
 import type { NoticeActions } from '../components/NoticeScreen';
@@ -8,6 +9,7 @@ import type { TeacherRow } from '../components/TeacherTable';
 import { attendanceCalendarMarks, latestAbsenceLabel } from '../services/calendarMarks';
 import { parseServerDate } from '../services/schedule';
 import { classroomApi } from '../services/classroom';
+import { absenceApi } from '../services/absence';
 import { useSession } from '../auth/Session';
 import { useClasses, type RequestKind } from '../store/Classes';
 
@@ -47,14 +49,21 @@ export default function ClassPage() {
     remove: async nid => removeNotice(localId, nid),
   }, [localId, author, addNotice, updateNotice, removeNotice]);
 
-  const requestActions = useMemo<Record<RequestKind, StudentRequestActions> | undefined>(() => {
-    if (localId === undefined) return undefined;
+  const requestActions = useMemo<Partial<Record<RequestKind, StudentRequestActions>> | undefined>(() => {
+    if (localId === undefined) {
+      if (!id || !session || teacher) return undefined;
+      return { absence: { submit: async ({ date, reason }) => {
+        const result = await absenceApi.create(id, date, reason, session.accessToken);
+        if (!result || !Number.isSafeInteger(result.id)) throw new Error('신청 결과를 확인하지 못했어요.');
+        Alert.alert('결석 신청 완료', '신청 내역 조회 기능은 준비 중이에요.');
+      } } };
+    }
     const make = (kind: RequestKind): StudentRequestActions => ({
       submit: async ({ date, reason }) => addRequest(localId, { kind, student: author, date, reason }),
       cancel: async rid => cancelRequest(localId, rid),
     });
     return { absence: make('absence'), makeup: make('makeup') };
-  }, [localId, author, addRequest, cancelRequest]);
+  }, [localId, id, session, teacher, author, addRequest, cancelRequest]);
 
   const studentRequests = useMemo(() => {
     const mine = (kind: RequestKind): StudentRequest[] => requests.filter(r => r.kind === kind && r.student === author).map(r => {
@@ -88,7 +97,7 @@ export default function ClassPage() {
   return <ClassScreen
     role={teacher ? 'teacher' : 'student'} name={currentHome?.name || name || '수업'} classId={id} loadError={currentHome?.error}
     notices={localId === undefined ? [] : store.noticesOf(localId)} noticeActions={noticeActions}
-    studentRequests={studentRequests} requestActions={requestActions} teacherRows={teacherRows}
+    studentRequests={studentRequests} requestActions={requestActions} teacherRows={teacherRows} absenceHistoryUnavailable={localId === undefined}
     onTeacherAction={localId === undefined ? undefined : (tab, rowId, action) => {
       if (tab === '보강설정' && action === '삭제') removeAvailability(localId, rowId);
       else if ((tab === '결석정보' || tab === '보강') && (action === '승인' || action === '거절')) setRequestStatus(localId, rowId, action === '승인' ? 'approved' : 'rejected');
