@@ -1,4 +1,4 @@
-import { jsonBody, request } from './http';
+import { jsonBody, request, withRequestTimeout } from './http';
 
 export type Absence = {
   id: number;
@@ -27,16 +27,10 @@ export function absenceStatusLabel(status: Absence['status']): string {
   return ({ PENDING: '승인 대기', APPROVED: '수락됨', REJECTED: '거절됨', CANCELED: '취소됨' } as const)[status] ?? '상태 확인 필요';
 }
 export async function absenceRequest<T>(path: string, options: RequestInit, token: string, timeoutMs = 20000): Promise<T | undefined> {
-  const controller = new AbortController();
-  let timedOut = false;
-  const timer = setTimeout(() => { timedOut = true; controller.abort(); }, timeoutMs);
-  try { return await request<T>(path, { ...options, signal: controller.signal }, token); }
-  catch (error) {
-    if (timedOut) throw new Error(options.method && options.method !== 'GET'
+  return withRequestTimeout(signal => request<T>(path, { ...options, signal }, token), timeoutMs,
+    () => new Error(options.method && options.method !== 'GET'
       ? '요청 결과를 확인하지 못했어요. 신청 내역을 확인한 후 다시 시도해주세요.'
-      : '결석 신청 내역 조회가 지연되고 있어요. 잠시 후 다시 시도해주세요.');
-    throw error;
-  } finally { clearTimeout(timer); }
+      : '결석 신청 내역 조회가 지연되고 있어요. 잠시 후 다시 시도해주세요.'));
 }
 export const absenceApi = {
   listMine: (classId: number, token: string) => absenceRequest<AbsenceListItem[]>(`/api/class/absences/${classId}/me`, {}, token),

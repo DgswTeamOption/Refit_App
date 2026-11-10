@@ -1,6 +1,6 @@
 import dayjs from 'dayjs';
 import customParseFormat from 'dayjs/plugin/customParseFormat';
-import { jsonBody, request } from './http';
+import { jsonBody, request, withRequestTimeout } from './http';
 
 dayjs.extend(customParseFormat);
 export const serverDateFormat = 'YYYY-MM-DD HH:mm:ss';
@@ -29,16 +29,10 @@ export function studentScheduleDates(schedules: Schedule[], studentId: number | 
   return studentId === undefined ? [] : scheduleDates(schedules.filter(item => item.studentId === studentId));
 }
 export async function scheduleRequest<T>(path: string, options: RequestInit, token: string, timeoutMs = 20000): Promise<T | undefined> {
-  const controller = new AbortController();
-  let timedOut = false;
-  const timer = setTimeout(() => { timedOut = true; controller.abort(); }, timeoutMs);
-  try { return await request<T>(path, { ...options, signal: controller.signal }, token); }
-  catch (error) {
-    if (timedOut) throw new Error(options.method && options.method !== 'GET'
+  return withRequestTimeout(signal => request<T>(path, { ...options, signal }, token), timeoutMs,
+    () => new Error(options.method && options.method !== 'GET'
       ? '요청 결과를 확인하지 못했어요. 시간표를 확인한 후 다시 시도해주세요.'
-      : '시간표 조회가 지연되고 있어요. 잠시 후 다시 시도해주세요.');
-    throw error;
-  } finally { clearTimeout(timer); }
+      : '시간표 조회가 지연되고 있어요. 잠시 후 다시 시도해주세요.'));
 }
 export const scheduleApi = {
   list: (classId: number, token: string) => scheduleRequest<Schedule[]>(`/api/class/schedule/${classId}`, {}, token),
