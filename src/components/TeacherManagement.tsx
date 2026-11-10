@@ -15,7 +15,7 @@ const headings: Record<TeacherTab, string[]> = {
   보강: ['학생', '날짜/시간', '상태'],
   보강설정: ['날짜', '시간', '관리'],
 };
-export function TeacherManagement({ tab, addingAvailability, onAvailabilityChange, rows = [], availability = [], onAction, onSaveAvailability }: { tab: TeacherTab; addingAvailability: boolean; onAvailabilityChange: (active: boolean) => void; rows?: TeacherRow[]; availability?: AvailabilityItem[]; onAction?: TeacherAction; onSaveAvailability?: (input: AvailabilityInput, id?: string) => Promise<void> }) {
+export function TeacherManagement({ tab, addingAvailability, onAvailabilityChange, rows = [], availability = [], onAction, onSaveAvailability, dataUnavailable = false }: { dataUnavailable?: boolean; tab: TeacherTab; addingAvailability: boolean; onAvailabilityChange: (active: boolean) => void; rows?: TeacherRow[]; availability?: AvailabilityItem[]; onAction?: TeacherAction; onSaveAvailability?: (input: AvailabilityInput, id?: string) => Promise<void> }) {
   const [busy, setBusy] = useState(false);
   const [query, setQuery] = useState('');
   const [dateValue, setDateValue] = useState('');
@@ -39,13 +39,13 @@ export function TeacherManagement({ tab, addingAvailability, onAvailabilityChang
     <Text style={styles.label}>시작 시간</Text><DateTimeField mode="time" value={startTime} onChange={setStartTime} />
     <Text style={styles.label}>종료 시간</Text><DateTimeField mode="time" value={endTime} onChange={setEndTime} />
     <Pressable disabled={busy} style={styles.save} onPress={saveAvailability}><Image source={require('../../assets/figma/apply-button.svg')} style={StyleSheet.absoluteFill} contentFit="fill" /><Text style={styles.buttonText}>저장</Text></Pressable>
-    <Text style={styles.registered}>등록된 가능 시간</Text>{availability.length ? availability.map(item => <View key={item.id} style={styles.availabilityCard}><Image source={require('../../assets/figma/availability-card.svg')} style={StyleSheet.absoluteFill} contentFit="fill" /><View><Text style={styles.availabilityDate}>{item.date}</Text><Text style={styles.availabilityTime}>{item.startTime} ~ {item.endTime}</Text></View><Pressable accessibilityRole="button" onPress={() => { setEditingId(item.id); setDateValue(item.date); setStartTime(item.startTime); setEndTime(item.endTime); }}><Text style={styles.edit}>수정</Text></Pressable></View>) : <Text style={styles.noAvailability}>등록된 가능 시간이 없어요.</Text>}
+    <Text style={styles.registered}>등록된 가능 시간</Text>{availability.length ? availability.map(item => <View key={item.id} style={styles.availabilityCard}><Image source={require('../../assets/figma/availability-card.svg')} style={StyleSheet.absoluteFill} contentFit="fill" /><View><Text style={styles.availabilityDate}>{item.date}</Text><Text style={styles.availabilityTime}>{item.startTime} ~ {item.endTime}</Text></View><Pressable accessibilityRole="button" onPress={() => { setEditingId(item.id); setDateValue(item.date); setStartTime(item.startTime); setEndTime(item.endTime); }}><Text style={styles.edit}>수정</Text></Pressable></View>) : <Text style={styles.noAvailability}>{dataUnavailable ? '가능 시간 조회 기능은 준비 중이에요.' : '등록된 가능 시간이 없어요.'}</Text>}
   </View>;
   return <View style={styles.content}>
     {tab === '학생' && <View style={styles.search}><Image source={require('../../assets/figma/student-search.svg')} style={StyleSheet.absoluteFill} contentFit="fill" /><TextInput accessibilityLabel="학생 이름 검색" value={query} onChangeText={setQuery} placeholder="학생 이름 검색" placeholderTextColor="#aaa" style={styles.searchText} /></View>}
     {tab === '출석' && <Text style={styles.date}>{date}</Text>}
     {tab === '보강설정' && <Pressable style={styles.topButton} onPress={() => onAvailabilityChange(true)}><Text style={styles.buttonText}>+ 가능 시간 추가</Text></Pressable>}
-    <TeacherTable headings={headings[tab]} rows={tab === '학생' ? rows.filter(row => typeof row.cells[0] === 'string' && row.cells[0].includes(query.trim())) : rows} emptyMessage={tab === '학생' ? '학생 정보가 없어요.' : tab === '출석' ? '출석 정보가 없어요.' : tab === '보강설정' ? '등록된 가능 시간이 없어요.' : '신청 내역이 없어요.'} onAction={onAction} />
+    <TeacherTable headings={headings[tab]} rows={tab === '학생' ? rows.filter(row => typeof row.cells[0] === 'string' && row.cells[0].includes(query.trim())) : rows} emptyMessage={dataUnavailable ? '조회 기능은 준비 중이에요.' : tab === '학생' ? '학생 정보가 없어요.' : tab === '출석' ? '출석 정보가 없어요.' : tab === '보강설정' ? '등록된 가능 시간이 없어요.' : '신청 내역이 없어요.'} onAction={onAction} />
     {tab === '출석' && <Pressable style={styles.bottomButton} onPress={() => Alert.alert('준비 중', 'QR 출석 기능은 준비 중이에요.')}><Text style={styles.buttonText}>QR사용</Text></Pressable>}
   </View>;
 }

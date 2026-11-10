@@ -97,7 +97,7 @@ export default function ClassPage() {
   return <ClassScreen
     role={teacher ? 'teacher' : 'student'} name={currentHome?.name || name || '수업'} classId={id} loadError={currentHome?.error}
     notices={localId === undefined ? [] : store.noticesOf(localId)} noticeActions={noticeActions}
-    studentRequests={studentRequests} requestActions={requestActions} teacherRows={teacherRows} absenceHistoryUnavailable={localId === undefined}
+    studentRequests={studentRequests} requestActions={requestActions} teacherRows={teacherRows} serverDataUnavailable={localId === undefined}
     onTeacherAction={localId === undefined ? undefined : (tab, rowId, action) => {
       if (tab === '보강설정' && action === '삭제') removeAvailability(localId, rowId);
       else if ((tab === '결석정보' || tab === '보강') && (action === '승인' || action === '거절')) setRequestStatus(localId, rowId, action === '승인' ? 'approved' : 'rejected');
