@@ -19,7 +19,7 @@ type Value = {
   teacherClasses: StoredClass[];
   studentClasses: Omit<StoredClass, 'code'>[];
   createClass: (name: string, bannerUrl?: string | null) => StoredClass;
-  joinClass: (code: string, student?: string) => StoredClass;
+  joinClass: (code: string, student?: string) => Omit<StoredClass, 'code'>;
   deleteClass: (id: number) => void;
   leaveClass: (id: number, student?: string) => void;
   noticesOf: (classId: number) => Notice[];
@@ -66,6 +66,7 @@ function useScopedState<T>(scope: string, initial: T): [T, Dispatch<SetStateActi
 
 export function ClassesProvider({ children }: { children: ReactNode }) {
   const { session, localUser } = useSession();
+  const teacher = (session?.user.role ?? localUser?.role) === 'TEACHER';
   const scope = session ? `server:${session.user.id}` : localUser ? `local:${localUser.email.trim().toLowerCase()}` : 'guest';
   const [classes, setClasses] = useScopedState<StoredClass[]>(scope, []);
   const [joined, setJoined] = useScopedState<number[]>(scope, []);
@@ -80,10 +81,11 @@ export function ClassesProvider({ children }: { children: ReactNode }) {
   const [notifications, setNotifications] = useScopedState<StoredNotification[]>(scope, []);
   const notify = useCallback((title: string, body: string) => setNotifications(prev => [{ id: `n-${uid()}-${prev.length}`, title, body, read: false }, ...prev]), [setNotifications]);
   const createClass = useCallback((name: string, bannerUrl?: string | null) => {
+    if (!teacher) throw new Error('선생님만 수업을 만들 수 있어요.');
     const item: StoredClass = { id: nextId, name, source: 'local', bannerUrl: bannerUrl ?? null, code: makeCode(new Set(classes.map(c => c.code))) };
     setNextId(nextId + 1); setClasses(prev => [...prev, item]);
     return item;
-  }, [classes, nextId, setClasses, setNextId]);
+  }, [classes, nextId, setClasses, setNextId, teacher]);
   const joinClass = useCallback((code: string, student = '학생') => {
     const item = classes.find(c => c.code === code.trim().toUpperCase());
     if (!item) throw new Error('수업코드를 찾을 수 없어요.');
@@ -96,7 +98,8 @@ export function ClassesProvider({ children }: { children: ReactNode }) {
       if (!ids.has(student)) ids.set(student, newId);
       return { ...prev, [item.id]: ids };
     });
-    return item;
+    const { code: _code, ...studentClass } = item;
+    return studentClass;
   }, [classes, joined, setJoined, setMembers, setMemberIds]);
   const deleteClass = useCallback((id: number) => {
     setClasses(prev => prev.filter(c => c.id !== id)); setJoined(prev => prev.filter(x => x !== id));
@@ -148,7 +151,7 @@ export function ClassesProvider({ children }: { children: ReactNode }) {
   }, [setSchedules]);
   const markAllRead = useCallback(() => setNotifications(prev => prev.map(n => ({ ...n, read: true }))), [setNotifications]);
   const studentClasses = useMemo(() => classes.filter(c => joined.includes(c.id)).map(({ code: _code, ...item }) => item), [classes, joined]);
-  const value = useMemo(() => ({ teacherClasses: classes, studentClasses, createClass, joinClass, deleteClass, leaveClass, noticesOf, addNotice, updateNotice, removeNotice, schedulesOf, addSchedule, requestsOf, addRequest, setRequestStatus, membersOf, studentOptionsOf, attendanceOf, markAttendance, cancelRequest, availabilityOf, addAvailability, updateAvailability, removeAvailability, notifications, markAllRead }), [classes, studentClasses, createClass, joinClass, deleteClass, leaveClass, noticesOf, addNotice, updateNotice, removeNotice, schedulesOf, addSchedule, requestsOf, addRequest, setRequestStatus, membersOf, studentOptionsOf, attendanceOf, markAttendance, cancelRequest, availabilityOf, addAvailability, updateAvailability, removeAvailability, notifications, markAllRead]);
+  const value = useMemo(() => ({ teacherClasses: teacher ? classes : [], studentClasses, createClass, joinClass, deleteClass, leaveClass, noticesOf, addNotice, updateNotice, removeNotice, schedulesOf, addSchedule, requestsOf, addRequest, setRequestStatus, membersOf, studentOptionsOf, attendanceOf, markAttendance, cancelRequest, availabilityOf, addAvailability, updateAvailability, removeAvailability, notifications, markAllRead }), [classes, teacher, studentClasses, createClass, joinClass, deleteClass, leaveClass, noticesOf, addNotice, updateNotice, removeNotice, schedulesOf, addSchedule, requestsOf, addRequest, setRequestStatus, membersOf, studentOptionsOf, attendanceOf, markAttendance, cancelRequest, availabilityOf, addAvailability, updateAvailability, removeAvailability, notifications, markAllRead]);
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }
 export function useClasses() {
