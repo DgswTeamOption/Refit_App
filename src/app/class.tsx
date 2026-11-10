@@ -1,5 +1,5 @@
 import { useLocalSearchParams } from 'expo-router';
-import { useMemo } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { ClassScreen } from '../components/ClassScreen';
 import type { NoticeActions } from '../components/NoticeScreen';
 import type { StudentRequest, StudentRequestActions } from '../components/StudentRequests';
@@ -7,6 +7,7 @@ import type { TeacherTab } from '../components/TeacherManagement';
 import type { TeacherRow } from '../components/TeacherTable';
 import { attendanceCalendarMarks, latestAbsenceLabel } from '../services/calendarMarks';
 import { parseServerDate } from '../services/schedule';
+import { classroomApi } from '../services/classroom';
 import { useSession } from '../auth/Session';
 import { useClasses, type RequestKind } from '../store/Classes';
 
@@ -17,6 +18,19 @@ export default function ClassPage() {
   const teacher = (session?.user.role ?? localUser?.role) === 'TEACHER';
   const id = classId && /^\d+$/.test(classId) && Number(classId) > 0 ? Number(classId) : undefined;
   const localId = source === 'server' ? undefined : id;
+  const token = session?.accessToken;
+  const [serverHome, setServerHome] = useState<{ token: string; id: number; name?: string; error?: string } | null>(null);
+  useEffect(() => {
+    if (source !== 'server' || !id || !token) return;
+    let active = true;
+    const now = new Date();
+    classroomApi.home(id, now.getFullYear(), now.getMonth() + 1, token).then(data => {
+      if (!data || data.classroomId !== id || typeof data.name !== 'string') throw new Error('수업 정보를 확인할 수 없어요.');
+      if (active) setServerHome({ token, id, name: data.name });
+    }).catch(error => { if (active) setServerHome({ token, id, error: error instanceof Error ? error.message : '수업 정보를 불러오지 못했어요.' }); });
+    return () => { active = false; };
+  }, [source, id, token]);
+  const currentHome = serverHome && serverHome.token === token && serverHome.id === id ? serverHome : null;
   const author = session?.user.name ?? localUser?.name ?? (teacher ? '선생님' : '학생');
   const { addNotice, updateNotice, removeNotice, addRequest, cancelRequest, addAvailability, updateAvailability, removeAvailability, markAllRead, setRequestStatus, markAttendance, addSchedule } = store;
   const { requestsOf, availabilityOf, membersOf, attendanceOf } = store;
@@ -72,7 +86,7 @@ export default function ClassPage() {
   const calendarMarks = useMemo(() => attendanceCalendarMarks(requests, attendance, teacher, author), [requests, attendance, teacher, author]);
 
   return <ClassScreen
-    role={teacher ? 'teacher' : 'student'} name={name || '수업'} classId={id}
+    role={teacher ? 'teacher' : 'student'} name={currentHome?.name || name || '수업'} classId={id} loadError={currentHome?.error}
     notices={localId === undefined ? [] : store.noticesOf(localId)} noticeActions={noticeActions}
     studentRequests={studentRequests} requestActions={requestActions} teacherRows={teacherRows}
     onTeacherAction={localId === undefined ? undefined : (tab, rowId, action) => {
