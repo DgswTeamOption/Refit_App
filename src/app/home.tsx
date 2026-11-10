@@ -31,7 +31,7 @@ export default function Home() {
       const message = error instanceof ApiError && error.status === 404
         ? '수업 목록을 찾을 수 없어요. 서버의 수업 API를 확인해주세요.'
         : error instanceof Error ? error.message : '수업 목록을 불러오지 못했어요.';
-      setResult({ token, error: message });
+      setResult(previous => ({ token, items: previous?.token === token ? previous.items : undefined, error: message }));
     });
     return () => { active = false; };
   // A revision change explicitly refreshes the list after mutations or a retry.
@@ -52,7 +52,7 @@ export default function Home() {
     catch (error) { if (error instanceof ClassroomTimeoutError) setRevision(current => current + 1); throw error; }
     if (!item) throw new Error('수업 결과를 확인할 수 없어요.');
     const summary = toSummary(item, teacher);
-    setResult(previous => previous?.token === session.accessToken && previous.items ? { token: session.accessToken, items: [summary, ...previous.items.filter(existing => existing.id !== summary.id)] } : previous);
+    setResult(previous => previous && previous.token !== session.accessToken ? previous : { token: session.accessToken, items: [summary, ...(previous?.items ?? []).filter(existing => existing.id !== summary.id)] });
     if (teacher && summary.code) Alert.alert('수업이 만들어졌어요', `수업코드: ${summary.code}`);
     setRevision(value => value + 1);
   }
@@ -76,5 +76,5 @@ export default function Home() {
     return { ...item, calendarDates: teacher ? scheduleDates(schedules) : studentScheduleDates(schedules, studentId) };
   });
   const current = result?.token === token ? result : null;
-  return <HomeScreen role={teacher ? 'teacher' : 'student'} classes={session ? current?.items ?? [] : localList} listStatus={session && !current ? '수업 목록을 불러오는 중이에요.' : current?.error} onRetry={current?.error ? () => { setResult(null); setRevision(value => value + 1); } : undefined} onSubmitClass={submit} onRemoveClass={removeClass} notifications={store.notifications} notificationActions={{ markAllRead: async () => store.markAllRead() }} />;
+  return <HomeScreen role={teacher ? 'teacher' : 'student'} classes={session ? current?.items ?? [] : localList} listStatus={session && !current ? '수업 목록을 불러오는 중이에요.' : current?.items?.length ? undefined : current?.error} listError={current?.items?.length ? current.error : undefined} onRetry={current?.error ? () => { setResult(previous => previous?.items?.length ? { ...previous, error: undefined } : null); setRevision(value => value + 1); } : undefined} onSubmitClass={submit} onRemoveClass={removeClass} notifications={store.notifications} notificationActions={{ markAllRead: async () => store.markAllRead() }} />;
 }
