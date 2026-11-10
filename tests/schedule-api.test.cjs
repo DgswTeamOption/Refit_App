@@ -304,3 +304,14 @@ test('schedule accessibility preserves full start and end dates', () => {
   assert.equal(scheduleAccessibility('2026-11-12 23:30:00', '2026-11-13 00:30:00'), '시작 2026년 11월 12일 23:30, 종료 2026년 11월 13일 00:30');
   assert.match(scheduleAccessibility('2026-11-12 23:30:00', 'invalid'), /종료 시간을 확인할 수 없어요/);
 });
+
+
+test('notification loading can recover when the server does not respond', async () => {
+  const originalFetch = global.fetch;
+  global.fetch = (_url, options) => new Promise((_resolve, reject) => {
+    options.signal.addEventListener('abort', () => reject(new Error('aborted')));
+  });
+  try {
+    await assert.rejects(notificationApi.list('token', 0, 5), { message: '알림 조회가 지연되고 있어요. 잠시 후 다시 시도해주세요.' });
+  } finally { global.fetch = originalFetch; }
+});
