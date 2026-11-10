@@ -9,6 +9,10 @@ npx eslint src
 npx tsc --noEmit
 npm test
 ```
+- 설치 후
+```sh
+npm run ios
+```
 
 ## 서버 연결
 
