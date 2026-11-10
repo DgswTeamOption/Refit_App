@@ -29,7 +29,7 @@ export default function Home() {
     }).catch(error => {
       if (!active) return;
       const message = error instanceof ApiError && error.status === 404
-        ? '수업 목록을 찾을 수 없어요. 서버의 수업 API를 확인해주세요.'
+        ? '현재 수업이 없습니다.'
         : error instanceof Error ? error.message : '수업 목록을 불러오지 못했어요.';
       setResult(previous => ({ token, items: previous?.token === token ? previous.items : undefined, error: message }));
     });
