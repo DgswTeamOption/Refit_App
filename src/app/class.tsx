@@ -115,7 +115,7 @@ export default function ClassPage() {
         const a = absences.filter(r => r.student === student);
         return { id: student, cells: [student, `${makeups.filter(r => r.student === student).length}/${a.length}`, latestAbsenceLabel(absences, attendance, student, today)] };
       }),
-      결석정보: absences.map(r => ({ id: r.id, cells: [r.student, r.date, r.reason, statusCell(r.status)], actions: r.status === 'pending' ? ['승인' as const, '거절' as const] : undefined })),
+      결석정보: absences.map(r => ({ id: r.id, cells: [r.student, r.date, r.reason, statusCell(r.status)], reasonDetail: r.reason, actions: r.status === 'pending' ? ['승인' as const, '거절' as const] : undefined })),
       보강: makeups.map(r => ({ id: r.id, cells: [r.student, r.date, statusCell(r.status)], actions: r.status === 'pending' ? ['승인' as const, '거절' as const] : undefined })),
       보강설정: availability.map(a => ({ id: a.id, cells: [a.date, `${a.startTime} ~ ${a.endTime}`], actions: ['삭제' as const] })),
     };
@@ -129,7 +129,7 @@ export default function ClassPage() {
     }
     return localMarks;
   }, [requests, attendance, teacher, author, source, currentAbsences]);
-  const serverTeacherRows: Partial<Record<TeacherTab, TeacherRow[]>> = { ...teacherRows, 결석정보: (currentAbsences?.items ?? []).map(item => ({ id: String(item.id), cells: [item.student_name || `학생 #${item.student_id}`, item.absence_date, item.reason, item.status === 'APPROVED' ? { label: '승인', tone: 'blue' as const } : item.status === 'REJECTED' ? { label: '거절', tone: 'red' as const } : { label: item.status === 'CANCELED' ? '취소' : '대기중', tone: 'neutral' as const }], actions: item.status === 'PENDING' ? ['승인' as const, '거절' as const] : undefined })) };
+  const serverTeacherRows: Partial<Record<TeacherTab, TeacherRow[]>> = { ...teacherRows, 결석정보: (currentAbsences?.items ?? []).map(item => ({ id: String(item.id), cells: [item.student_name || `학생 #${item.student_id}`, item.absence_date, item.reason, item.status === 'APPROVED' ? { label: '승인', tone: 'blue' as const } : item.status === 'REJECTED' ? { label: '거절', tone: 'red' as const } : { label: item.status === 'CANCELED' ? '취소' : '대기중', tone: 'neutral' as const }], reasonDetail: item.reason, actions: item.status === 'PENDING' ? ['승인' as const, '거절' as const] : undefined })) };
 
   return <ClassScreen
     role={teacher ? 'teacher' : 'student'} name={currentHome?.name || name || '수업'} classId={id} loadError={currentHome?.error}
