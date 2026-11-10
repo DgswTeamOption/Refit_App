@@ -21,7 +21,7 @@ const { emailApi } = loadTypeScript('src/services/email.ts', { './http': http })
 const { userApi } = loadTypeScript('src/services/user.ts', { './http': http, 'react-native': { Platform: { OS: 'ios' } } });
 const fakeProfile = { id: 42, name: '민지', role: 'STUDENT' };
 const fakeUserApi = { get: async (id, token) => { assert.equal(id, 42); assert.ok(token); return fakeProfile; } };
-const { authApi, googleSession, GoogleUserNotRegistered } = loadTypeScript('src/services/auth.ts', { './http': http, './user': { userApi: fakeUserApi } });
+const { authApi, emailSession, googleSession, GoogleUserNotRegistered } = loadTypeScript('src/services/auth.ts', { './http': http, './user': { userApi: fakeUserApi } });
 
 test('server dates are parsed strictly without assuming a timezone', () => {
   assert.equal(parseServerDate('2026-08-27 16:00:00').format('YYYY-MM-DD HH:mm:ss'), '2026-08-27 16:00:00');
@@ -104,6 +104,26 @@ test('Google registration and login use an ID token and obtain the server profil
     assert.deepEqual(JSON.parse(calls[1].options.body), { idToken: 'google-id-token' });
     assert.equal(calls[1].options.headers.has('Authorization'), false);
     assert.deepEqual(session, { accessToken, refreshToken: 'refresh', user: fakeProfile });
+  } finally { global.fetch = originalFetch; }
+});
+
+test('email registration and login submit the verification code directly to auth', async () => {
+  const originalFetch = global.fetch;
+  const calls = [];
+  const accessToken = `e30.${Buffer.from(JSON.stringify({ userId: 42, role: 'STUDENT' })).toString('base64url')}.signature`;
+  global.fetch = async (url, options) => {
+    calls.push({ url, options });
+    return new Response(JSON.stringify({ success: true, data: url.endsWith('/register') ? { id: 42 } : { accessToken, refreshToken: 'refresh' } }), { status: 200 });
+  };
+  try {
+    await authApi.registerEmail('student@example.com', '민지', 'STUDENT', '123456');
+    const session = await emailSession('student@example.com', '654321');
+    assert.equal(calls[0].url, 'http://localhost:8080/api/auth/register');
+    assert.deepEqual(JSON.parse(calls[0].options.body), { email_id: 'student@example.com', name: '민지', role: 'STUDENT', verificationToken: '123456' });
+    assert.equal(calls[1].url, 'http://localhost:8080/api/auth/login');
+    assert.deepEqual(JSON.parse(calls[1].options.body), { email_id: 'student@example.com', verificationToken: '654321' });
+    assert.equal(calls[1].options.headers.has('Authorization'), false);
+    assert.deepEqual(session.user, fakeProfile);
   } finally { global.fetch = originalFetch; }
 });
 

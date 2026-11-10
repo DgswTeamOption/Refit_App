@@ -6,7 +6,9 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { emailApi } from '../services/email';
 import { useSession, type Session } from '../auth/Session';
 import { getGoogleIdToken } from '../auth/google';
-import { authApi, googleSession, GoogleUserNotRegistered } from '../services/auth';
+import { authApi, emailSession, googleSession, GoogleUserNotRegistered } from '../services/auth';
+import { ApiError } from '../services/http';
+import { useClasses } from '../store/Classes';
 
 type Mode = 'login' | 'signup' | 'role';
 const blue = '#0099ff';
@@ -17,6 +19,7 @@ function Button({ label, variant = 'primary', onPress, disabled = false }: { lab
 
 export function AuthScreen({ mode }: { mode: Mode }) {
   const { signupDraft, setSignupDraft, setLocalUser, setSession, pendingGoogleToken, setPendingGoogleToken } = useSession();
+  const { clear: clearClasses } = useClasses();
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [code, setCode] = useState('');
@@ -46,7 +49,8 @@ export function AuthScreen({ mode }: { mode: Mode }) {
     } catch (error) { Alert.alert('인증코드 발송 실패', error instanceof Error ? error.message : '다시 시도해주세요.'); }
     finally { setBusy(false); }
   }
-  function finishGoogleLogin(next: Session) {
+  function finishLogin(next: Session) {
+    clearClasses();
     setLocalUser(null); setSignupDraft(null); setPendingGoogleToken(null); setSession(next);
     router.replace({ pathname: '/home', params: { role: next.user.role === 'TEACHER' ? 'teacher' : 'student' } });
   }
@@ -56,7 +60,7 @@ export function AuthScreen({ mode }: { mode: Mode }) {
     try {
       const idToken = await getGoogleIdToken();
       if (!idToken) return;
-      try { finishGoogleLogin(await googleSession(idToken)); }
+      try { finishLogin(await googleSession(idToken)); }
       catch (error) {
         if (!(error instanceof GoogleUserNotRegistered)) throw error;
         setSignupDraft(null); setPendingGoogleToken(idToken); router.push('/role');
@@ -73,35 +77,37 @@ export function AuthScreen({ mode }: { mode: Mode }) {
             await authApi.registerGoogle(pendingGoogleToken, role === 'teacher' ? 'TEACHER' : 'STUDENT');
             setGoogleRegistered(true);
           }
-          finishGoogleLogin(await googleSession(pendingGoogleToken));
+          finishLogin(await googleSession(pendingGoogleToken));
         } catch (error) { Alert.alert('Google 회원가입 실패', error instanceof Error && error.message ? error.message : '다시 시도해주세요.'); }
         finally { setBusy(false); }
         return;
       }
       if (!signupDraft) return Alert.alert('회원가입 정보를 먼저 입력해주세요.');
-      const chosen = role === 'teacher' ? 'TEACHER' as const : 'STUDENT' as const;
-      setSignupDraft({ ...signupDraft, role: chosen });
-      setLocalUser({ name: signupDraft.name, email: signupDraft.email, role: chosen });
-      return router.replace({ pathname: '/home', params: { role } });
+      if (Date.now() >= signupDraft.expiresAt) return Alert.alert('인증코드가 만료됐어요.', '회원가입 화면에서 인증코드를 다시 받아주세요.');
+      setBusy(true);
+      try {
+        await authApi.registerEmail(signupDraft.email, signupDraft.name, role === 'teacher' ? 'TEACHER' : 'STUDENT', signupDraft.verificationCode);
+        setSignupDraft(null);
+        router.replace('/');
+        Alert.alert('회원가입 완료', '로그인을 위해 인증코드를 새로 받아주세요.');
+      } catch (error) { Alert.alert('회원가입 실패', error instanceof Error ? error.message : '다시 시도해주세요.'); }
+      finally { setBusy(false); }
+      return;
     }
-    if (mode === 'signup' && !name.trim()) return Alert.alert('이름을 입력해주세요.');
+    if (mode === 'signup' && (!name.trim() || name.trim().length > 50)) return Alert.alert('이름은 1~50자로 입력해주세요.');
     if (!sent || remaining === 0 || !/^\d{6}$/.test(code)) return Alert.alert('유효한 인증코드 6자리를 입력해주세요.');
     setBusy(true);
     try {
-      const result = await emailApi.verifyCode(sentEmail, code);
-      if (!result.data?.is_verification) throw new Error('인증코드를 확인해주세요.');
       if (mode === 'signup') {
         setPendingGoogleToken(null);
-        setSignupDraft({ name: name.trim(), email: sentEmail, role: 'STUDENT' });
+        setSignupDraft({ name: name.trim(), email: sentEmail, role: 'STUDENT', verificationCode: code, expiresAt });
         router.push('/role');
       }
-      else {
-        const known = signupDraft && signupDraft.email === sentEmail ? signupDraft : null;
-        const user = known ?? { name: sentEmail.split('@')[0], email: sentEmail, role: 'STUDENT' as const };
-        setLocalUser(user);
-        router.replace({ pathname: '/home', params: { role: user.role === 'TEACHER' ? 'teacher' : 'student' } });
-      }
-    } catch (error) { Alert.alert('인증 실패', error instanceof Error ? error.message : '다시 시도해주세요.'); }
+      else finishLogin(await emailSession(sentEmail, code));
+    } catch (error) {
+      if (mode === 'login' && error instanceof ApiError && (error.status === 404 || error.status === 429)) { setExpiresAt(0); setSentEmail(''); setCode(''); }
+      Alert.alert('인증 실패', error instanceof Error ? error.message : '다시 시도해주세요.');
+    }
     finally { setBusy(false); }
   }
   return <SafeAreaView edges={['top', 'bottom']} style={styles.safe}>
