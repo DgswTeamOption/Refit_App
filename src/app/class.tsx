@@ -6,6 +6,7 @@ import type { StudentRequest, StudentRequestActions } from '../components/Studen
 import type { TeacherTab } from '../components/TeacherManagement';
 import type { TeacherRow } from '../components/TeacherTable';
 import { attendanceCalendarMarks, latestAbsenceLabel } from '../services/calendarMarks';
+import { parseServerDate } from '../services/schedule';
 import { useSession } from '../auth/Session';
 import { useClasses, type RequestKind } from '../store/Classes';
 
@@ -41,7 +42,10 @@ export default function ClassPage() {
   }, [id, author, addRequest, cancelRequest]);
 
   const studentRequests = useMemo(() => {
-    const mine = (kind: RequestKind): StudentRequest[] => requests.filter(r => r.kind === kind && r.student === author).map(r => ({ id: r.id, dateLabel: r.date, statusLabel: r.status === 'approved' ? '승인' : r.status === 'rejected' ? '거절' : '대기중', canCancel: r.status === 'pending' }));
+    const mine = (kind: RequestKind): StudentRequest[] => requests.filter(r => r.kind === kind && r.student === author).map(r => {
+      const date = parseServerDate(`${r.date} 00:00:00`);
+      return { id: r.id, dateLabel: date.isValid() ? date.format('M월 D일') : r.date, statusLabel: r.status === 'approved' ? '수락됨' : r.status === 'rejected' ? '거절됨' : '승인 대기', canCancel: r.status === 'pending' };
+    });
     return { absence: mine('absence'), makeup: mine('makeup') };
   }, [requests, author]);
 
