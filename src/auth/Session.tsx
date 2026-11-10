@@ -14,6 +14,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<Session | null>(null);
   const [hydrated, setHydrated] = useState(false);
   const storageQueue = useRef<Promise<void>>(Promise.resolve());
+  const lastPersistedSession = useRef<Session | null>(null);
   // UI-only user carries no token, so no server calls are made with it.
   const [localUser, setLocalUser] = useState<LocalUser | null>(null);
   const [signupDraft, setSignupDraft] = useState<SignupDraft | null>(null);
@@ -21,11 +22,12 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   const currentSession = useRef<Session | null>(null);
   useEffect(() => {
     let active = true;
-    readStoredSession().then(value => { if (active && value) setSession(value); }).catch(() => {}).finally(() => { if (active) setHydrated(true); });
+    readStoredSession().then(value => { if (active && value) { lastPersistedSession.current = value; setSession(value); } }).catch(() => {}).finally(() => { if (active) setHydrated(true); });
     return () => { active = false; };
   }, []);
   useEffect(() => {
-    if (!hydrated) return;
+    if (!hydrated || session === lastPersistedSession.current) return;
+    lastPersistedSession.current = session;
     storageQueue.current = storageQueue.current.then(() => writeStoredSession(session)).catch(() => {});
   }, [hydrated, session]);
   useEffect(() => { currentSession.current = session; }, [session]);

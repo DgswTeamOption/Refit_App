@@ -27,3 +27,27 @@ test('stored session restores only an unexpired token for the same user and role
   assert.equal(parseStoredSession('not json', now), null);
   assert.equal(parseStoredSession(JSON.stringify({ ...valid, refreshToken: '' }), now), null);
 });
+
+test('native storage restores and removes a valid session on logout', async () => {
+  const entries = new Map();
+  const secureStore = {
+    getItemAsync: async key => entries.get(key) ?? null,
+    setItemAsync: async (key, value) => { entries.set(key, value); },
+    deleteItemAsync: async key => { entries.delete(key); },
+  };
+  const nativeModule = { exports: {} };
+  const nativeRequire = name => {
+    if (name === 'react-native') return { Platform: { OS: 'ios' } };
+    if (name === 'expo-modules-core') return { requireOptionalNativeModule: () => ({}) };
+    if (name === 'expo-secure-store') return secureStore;
+    return require(name);
+  };
+  new Function('require', 'module', 'exports', javascript)(nativeRequire, nativeModule, nativeModule.exports);
+  const { readStoredSession, writeStoredSession } = nativeModule.exports;
+  const session = saved({ userId: 42, role: 'STUDENT', exp: Math.floor(Date.now() / 1000) + 60 });
+  await writeStoredSession(session);
+  assert.deepEqual(await readStoredSession(), session);
+  await writeStoredSession(null);
+  assert.equal(await readStoredSession(), null);
+  assert.equal(entries.size, 0);
+});
