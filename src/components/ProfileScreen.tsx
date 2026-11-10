@@ -9,12 +9,14 @@ import { useInitial, useSession, type Session } from '../auth/Session';
 import { emailApi } from '../services/email';
 import { baseUrl } from '../services/http';
 import { userApi, type UserProfile } from '../services/user';
+import { useClasses } from '../store/Classes';
 
 type Page = 'view' | 'edit' | 'delete';
 type ProfileProps = { page: Page; notifications?: NotificationItem[]; notificationActions?: NotificationActions };
 export function ProfileScreen(props: ProfileProps) {
   const { session } = useSession();
-  return <ProfileBody key={session ? `user-${session.user.id}` : 'guest'} {...props} />;
+  const { notifications, markAllRead } = useClasses();
+  return <ProfileBody key={session ? `user-${session.user.id}` : 'guest'} {...props} notifications={props.notifications ?? notifications} notificationActions={props.notificationActions ?? { markAllRead: async () => markAllRead() }} />;
 }
 function ProfileBody({ page, notifications, notificationActions }: ProfileProps) {
   const { session, setSession, localUser, setLocalUser } = useSession();
