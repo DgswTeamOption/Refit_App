@@ -19,7 +19,7 @@ if (originalApiUrl !== undefined) process.env.EXPO_PUBLIC_API_URL = originalApiU
 const schedule = loadTypeScript('src/services/schedule.ts', { './http': http });
 const { scheduleApi, scheduleRequest, parseServerDate, scheduleDates, studentScheduleDates, scheduleAccessibility, validateScheduleList } = schedule;
 const { emailApi } = loadTypeScript('src/services/email.ts', { './http': http });
-const { notificationApi } = loadTypeScript('src/services/notification.ts', { './http': http });
+const { notificationApi, validateNotificationPage } = loadTypeScript('src/services/notification.ts', { './http': http });
 const { absenceApi, absenceRequest, absenceStatusLabel, isPastAbsenceDate, validateAbsenceList } = loadTypeScript('src/services/absence.ts', { './http': http });
 const { classroomApi, classroomRequest, classroomCalendarDates, ClassroomTimeoutError } = loadTypeScript('src/services/classroom.ts', { './http': http, './schedule': schedule });
 const { userApi } = loadTypeScript('src/services/user.ts', { './http': http, 'react-native': { Platform: { OS: 'ios' } } });
@@ -322,6 +322,14 @@ test('absence requests use the server date field and authenticated action endpoi
   } finally { global.fetch = originalFetch; }
 });
 
+
+test('notification lists reject malformed items and pagination', () => {
+  const page = { content: [{ notificationId: 8, message: '새 알림', isRead: false }], number: 0, last: true };
+  assert.deepEqual(validateNotificationPage(page), page);
+  assert.throws(() => validateNotificationPage({ ...page, number: -1 }));
+  assert.throws(() => validateNotificationPage({ ...page, content: [{ ...page.content[0], isRead: 'false' }] }));
+  assert.throws(() => validateNotificationPage({ ...page, content: [{ ...page.content[0], message: null }] }));
+});
 
 test('notifications use authenticated pagination and server deletion', async () => {
   const originalFetch = global.fetch;

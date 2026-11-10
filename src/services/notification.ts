@@ -2,6 +2,15 @@ import { request } from './http';
 
 export type ServerNotification = { notificationId: number; message: string; notificationType: string; createdAt: string; isRead: boolean };
 export type NotificationPage = { content: ServerNotification[]; number: number; last: boolean };
+export function validateNotificationPage(value: unknown): NotificationPage {
+  if (!value || typeof value !== 'object') throw new Error('알림 목록을 확인할 수 없어요.');
+  const page = value as Partial<NotificationPage>;
+  if (!Array.isArray(page.content) || typeof page.last !== 'boolean' || !Number.isSafeInteger(page.number) || (page.number ?? -1) < 0
+    || !page.content.every(item => item && Number.isSafeInteger(item.notificationId) && item.notificationId > 0 && typeof item.message === 'string' && typeof item.isRead === 'boolean')) {
+    throw new Error('알림 목록을 확인할 수 없어요.');
+  }
+  return page as NotificationPage;
+}
 export const notificationApi = {
   list: async (token: string, page = 0, timeoutMs = 15000) => {
     const controller = new AbortController();
