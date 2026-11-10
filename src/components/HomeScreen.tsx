@@ -16,7 +16,8 @@ type Role = 'student' | 'teacher';
 export function HomeScreen({ role, classes = [], notifications, notificationActions, onSubmitClass, onRemoveClass, listStatus, listError, onRetry }: { role: Role; classes?: ClassSummary[]; notifications?: NotificationItem[]; notificationActions?: NotificationActions; onSubmitClass?: (value: string, bannerUri?: string) => Promise<void> | void; onRemoveClass?: (item: ClassSummary) => Promise<void> | void; listStatus?: string; listError?: string; onRetry?: () => void }) {
   const { session } = useSession();
   const [month, setMonth] = useState(() => { const now = new Date(); return new Date(now.getFullYear(), now.getMonth(), 1); });
-  const [calendarResult, setCalendarResult] = useState<{ session: Session; ids: string; monthKey: string; dates: Record<number, string[]> } | null>(null);
+  const [calendarResult, setCalendarResult] = useState<{ session: Session; ids: string; monthKey: string; revision: number; dates: Record<number, string[]>; failed: boolean } | null>(null);
+  const [calendarRevision, setCalendarRevision] = useState(0);
   const [modalVisible, setModalVisible] = useState(false);
   const [busy, setBusy] = useState(false);
   const submitting = useRef(false);
@@ -36,12 +37,12 @@ export function HomeScreen({ role, classes = [], notifications, notificationActi
         if (result.status !== 'fulfilled') return;
         dates[classIds[index]] = result.value;
       });
-      setCalendarResult({ session, ids, monthKey, dates });
-      if (results.some(result => result.status === 'rejected')) Alert.alert('일정 조회 실패', '일부 수업 일정을 불러오지 못했어요.');
+      setCalendarResult({ session, ids, monthKey, revision: calendarRevision, dates, failed: results.some(result => result.status === 'rejected') });
     });
     return () => { active = false; };
-  }, [session, ids, monthKey, role]));
-  const currentDates = calendarResult && calendarResult.session === session && calendarResult.ids === ids && calendarResult.monthKey === monthKey ? calendarResult.dates : {};
+  }, [session, ids, monthKey, role, calendarRevision]));
+  const currentCalendar = calendarResult && calendarResult.session === session && calendarResult.ids === ids && calendarResult.monthKey === monthKey ? calendarResult : null;
+  const currentDates = currentCalendar?.dates ?? {};
   const teacher = role === 'teacher';
   const colors: ClassCalendarColor[] = ['peach', 'purple', 'yellow', 'mint'];
   const classLegend = classes.map((item, index) => ({ label: item.name, color: item.color ?? colors[index % colors.length] }));
@@ -78,6 +79,7 @@ export function HomeScreen({ role, classes = [], notifications, notificationActi
     </View>
     <ScrollView contentContainerStyle={styles.content}>
       <Calendar marks={calendarMarks} classLegend={classLegend} month={month} onMonthChange={setMonth} />
+      {currentCalendar?.failed && <View style={styles.listError}><Text style={styles.listErrorText}>일부 수업 일정을 불러오지 못했어요.</Text><Pressable accessibilityRole="button" accessibilityLabel="수업 일정 다시 불러오기" disabled={currentCalendar.revision !== calendarRevision} onPress={() => setCalendarRevision(value => value + 1)}><Text style={styles.listRetry}>{currentCalendar.revision !== calendarRevision ? '불러오는 중' : '다시 시도'}</Text></Pressable></View>}
       <View style={styles.sectionHeader}><Text style={styles.sectionTitle}>내 수업</Text><Pressable accessibilityRole="button" onPress={showModal}><Text style={styles.add}>+ {action}</Text></Pressable></View>
       {!!listError && <View style={styles.listError}><Text style={styles.listErrorText}>{listError}</Text><Pressable accessibilityRole="button" onPress={onRetry}><Text style={styles.listRetry}>다시 시도</Text></Pressable></View>}
       {listStatus ? <View style={styles.empty}><Text style={styles.emptyText}>{listStatus}</Text>{onRetry && <Pressable accessibilityRole="button" accessibilityLabel="수업 목록 다시 불러오기" onPress={onRetry} style={styles.emptyButton}><Image source={require('../../assets/figma/home-button.svg')} style={StyleSheet.absoluteFill} contentFit="fill" /><Text style={styles.buttonText}>다시 시도</Text></Pressable>}</View> : classes.length ? <ClassCards classes={classes} role={role} onRemove={onRemoveClass} /> : <View style={styles.empty}><Text style={styles.emptyText}>아직 참여한 수업이 없어요</Text><Pressable accessibilityRole="button" onPress={showModal} style={styles.emptyButton}><Image source={require('../../assets/figma/home-button.svg')} style={StyleSheet.absoluteFill} contentFit="fill" /><Text style={styles.buttonText}>{action}</Text></Pressable></View>}
