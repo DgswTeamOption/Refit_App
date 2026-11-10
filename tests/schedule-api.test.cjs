@@ -17,7 +17,7 @@ delete process.env.EXPO_PUBLIC_API_URL;
 const http = loadTypeScript('src/services/http.ts', { 'react-native': { Platform: { OS: 'ios' } } });
 if (originalApiUrl !== undefined) process.env.EXPO_PUBLIC_API_URL = originalApiUrl;
 const schedule = loadTypeScript('src/services/schedule.ts', { './http': http });
-const { scheduleApi, parseServerDate, scheduleDates, studentScheduleDates, scheduleAccessibility, validateScheduleList } = schedule;
+const { scheduleApi, scheduleRequest, parseServerDate, scheduleDates, studentScheduleDates, scheduleAccessibility, validateScheduleList } = schedule;
 const { emailApi } = loadTypeScript('src/services/email.ts', { './http': http });
 const { notificationApi } = loadTypeScript('src/services/notification.ts', { './http': http });
 const { absenceApi, absenceRequest, absenceStatusLabel, isPastAbsenceDate, validateAbsenceList } = loadTypeScript('src/services/absence.ts', { './http': http });
@@ -64,6 +64,17 @@ test('class calendar validates its class and only shows the student’s schedule
   assert.throws(() => classroomCalendarDates(home, 8));
   assert.throws(() => classroomCalendarDates({ ...home, calendar: null }, 7));
   assert.throws(() => classroomCalendarDates({ ...home, calendar: [{ ...item, classId: 8 }] }, 7));
+});
+
+test('schedule timeouts allow retry and identify uncertain writes', async () => {
+  const originalFetch = global.fetch;
+  global.fetch = (_url, options) => new Promise((_resolve, reject) => {
+    options.signal.addEventListener('abort', () => reject(new Error('aborted')));
+  });
+  try {
+    await assert.rejects(scheduleRequest('/api/class/schedule/7', {}, 'token', 5), /조회가 지연/);
+    await assert.rejects(scheduleRequest('/api/class/schedule/7', { method: 'POST' }, 'token', 5), /시간표를 확인/);
+  } finally { global.fetch = originalFetch; }
 });
 
 test('schedule requests use bearer authentication and server field names', async () => {

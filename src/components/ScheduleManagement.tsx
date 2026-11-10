@@ -52,10 +52,11 @@ export function ScheduleManagement({ classId, registration, onRegisterChange, st
     if (!session) return;
     setBusy(true);
     try {
-      await scheduleApi.create(classId, { studentId, startTime: startDate.format('YYYY-MM-DD HH:mm:ss'), endTime: endDate.format('YYYY-MM-DD HH:mm:ss') }, session.accessToken);
-      setRevision(value => value + 1); onRegisterChange(false);
+      const createdId = await scheduleApi.create(classId, { studentId, startTime: startDate.format('YYYY-MM-DD HH:mm:ss'), endTime: endDate.format('YYYY-MM-DD HH:mm:ss') }, session.accessToken);
+      if (!Number.isSafeInteger(createdId) || !createdId || createdId < 1) throw new Error('등록 결과를 확인하지 못했어요. 시간표를 확인해주세요.');
+      onRegisterChange(false);
     } catch (e) { Alert.alert('일정 등록 실패', e instanceof Error ? e.message : '다시 시도해주세요.'); }
-    finally { setBusy(false); }
+    finally { setRevision(value => value + 1); setBusy(false); }
   }
   const nameOf = (id: number) => availableStudents.find(student => student.id === id)?.name ?? `학생 #${id}`;
   const status = localMode ? '등록된 일정이 없어요.' : !session ? '로그인이 필요해요.' : !classId ? '수업 정보가 필요해요.' : !current ? '일정을 불러오는 중이에요.' : current.error || '등록된 일정이 없어요.';

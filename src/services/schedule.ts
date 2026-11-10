@@ -28,10 +28,22 @@ export function scheduleDates(schedules: Schedule[]): string[] {
 export function studentScheduleDates(schedules: Schedule[], studentId: number | undefined): string[] {
   return studentId === undefined ? [] : scheduleDates(schedules.filter(item => item.studentId === studentId));
 }
+export async function scheduleRequest<T>(path: string, options: RequestInit, token: string, timeoutMs = 20000): Promise<T | undefined> {
+  const controller = new AbortController();
+  let timedOut = false;
+  const timer = setTimeout(() => { timedOut = true; controller.abort(); }, timeoutMs);
+  try { return await request<T>(path, { ...options, signal: controller.signal }, token); }
+  catch (error) {
+    if (timedOut) throw new Error(options.method && options.method !== 'GET'
+      ? '요청 결과를 확인하지 못했어요. 시간표를 확인한 후 다시 시도해주세요.'
+      : '시간표 조회가 지연되고 있어요. 잠시 후 다시 시도해주세요.');
+    throw error;
+  } finally { clearTimeout(timer); }
+}
 export const scheduleApi = {
-  list: (classId: number, token: string) => request<Schedule[]>(`/api/class/schedule/${classId}`, {}, token),
-  calendar: (classId: number, year: number, month: number, token: string) => request<Schedule[]>(`/api/class/calendar/${classId}?year=${year}&month=${month}`, {}, token),
-  create: (classId: number, input: ScheduleInput, token: string) => request<number>(`/api/class/schedule/${classId}`, { method: 'POST', ...jsonBody({ student_id: input.studentId, start_time: input.startTime, end_time: input.endTime }) }, token),
-  update: (classId: number, scheduleId: number, input: Omit<ScheduleInput, 'studentId'>, token: string) => request<void>(`/api/class/schedule/${classId}/${scheduleId}`, { method: 'PATCH', ...jsonBody({ start_time: input.startTime, end_time: input.endTime }) }, token),
-  remove: (classId: number, scheduleId: number, token: string) => request<void>(`/api/class/schedule/${classId}/${scheduleId}`, { method: 'DELETE' }, token),
+  list: (classId: number, token: string) => scheduleRequest<Schedule[]>(`/api/class/schedule/${classId}`, {}, token),
+  calendar: (classId: number, year: number, month: number, token: string) => scheduleRequest<Schedule[]>(`/api/class/calendar/${classId}?year=${year}&month=${month}`, {}, token),
+  create: (classId: number, input: ScheduleInput, token: string) => scheduleRequest<number>(`/api/class/schedule/${classId}`, { method: 'POST', ...jsonBody({ student_id: input.studentId, start_time: input.startTime, end_time: input.endTime }) }, token),
+  update: (classId: number, scheduleId: number, input: Omit<ScheduleInput, 'studentId'>, token: string) => scheduleRequest<void>(`/api/class/schedule/${classId}/${scheduleId}`, { method: 'PATCH', ...jsonBody({ start_time: input.startTime, end_time: input.endTime }) }, token),
+  remove: (classId: number, scheduleId: number, token: string) => scheduleRequest<void>(`/api/class/schedule/${classId}/${scheduleId}`, { method: 'DELETE' }, token),
 };
