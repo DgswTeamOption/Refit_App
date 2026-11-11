@@ -24,5 +24,7 @@ export const notificationApi = {
     return withRequestTimeout(signal => request<NotificationPage>(`/notifications?page=${page}&size=20`, { signal }, token), timeoutMs,
       () => new Error('알림 조회가 지연되고 있어요. 잠시 후 다시 시도해주세요.'));
   },
+  read: (id: number, token: string) => request<ServerNotification>(`/notifications/${id}/read`, { method: 'PATCH' }, token),
+  readAll: (token: string) => request<{ updatedCount: number }>('/notifications/read-all', { method: 'PATCH' }, token),
   remove: (id: number, token: string) => request<void>(`/notifications/${id}`, { method: 'DELETE' }, token),
 };

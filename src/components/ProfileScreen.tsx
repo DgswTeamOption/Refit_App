@@ -66,7 +66,7 @@ function ProfileBody({ page, notifications, notificationActions }: ProfileProps)
       const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], allowsEditing: true, aspect: [1, 1], quality: 0.8 });
       if (result.canceled) return;
       const asset = result.assets[0];
-      if (asset.fileSize && asset.fileSize > 10 * 1024 * 1024) return Alert.alert('10MB 이하의 사진을 선택해주세요.');
+      if (asset.fileSize && asset.fileSize > 5 * 1024 * 1024) return Alert.alert('5MB 이하의 사진을 선택해주세요.');
       setBusy(true);
       const uploaded = await userApi.upload(asset, session.accessToken);
       const updated = await userApi.updateImage(uploaded.imageUrl, session.accessToken);

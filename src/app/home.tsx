@@ -1,3 +1,5 @@
+import type { ImagePickerAsset } from 'expo-image-picker';
+import { userApi } from '../services/user';
 import { useCallback, useState } from 'react';
 import { useFocusEffect } from 'expo-router';
 import { Alert } from 'react-native';
@@ -11,7 +13,7 @@ import { useClasses } from '../store/Classes';
 
 function toSummary(item: Classroom, teacher: boolean): ClassSummary {
   if (!Number.isSafeInteger(item.id) || item.id <= 0 || typeof item.name !== 'string') throw new Error('수업 정보를 확인할 수 없어요.');
-  return { id: item.id, name: item.name, source: 'server', ...(teacher && item.classCode ? { code: item.classCode } : {}) };
+  return { id: item.id, name: item.name, source: 'server', bannerUrl: item.bannerImageUrl, ...(teacher && item.classCode ? { code: item.classCode } : {}) };
 }
 export default function Home() {
   const store = useClasses();
@@ -37,18 +39,17 @@ export default function Home() {
   // A revision change explicitly refreshes the list after mutations or a retry.
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [token, teacher, revision]));
-  async function submit(value: string, bannerUri?: string) {
+  async function submit(value: string, banner?: ImagePickerAsset) {
     if (!session) {
-      if (teacher) { const item = store.createClass(value, bannerUri); Alert.alert('수업이 만들어졌어요', `수업코드: ${item.code}`); }
+      if (teacher) { const item = store.createClass(value, banner?.uri); Alert.alert('수업이 만들어졌어요', `수업코드: ${item.code}`); }
       else store.joinClass(value, localUser?.name);
       return;
     }
     if (teacher && value.length > 50) throw new Error('수업명은 50자 이하여야 해요.');
-    if (teacher && bannerUri) throw new Error('서버에 배너 저장 기능이 아직 없어요. 사진을 선택하지 않고 수업을 만들어주세요.');
     const code = value.toUpperCase();
     if (!teacher && !/^[A-Z0-9]{8}$/.test(code)) throw new Error('수업코드는 영문과 숫자 8자리로 입력해주세요.');
     let item: Classroom | undefined;
-    try { item = teacher ? await classroomApi.create(value, session.accessToken) : await classroomApi.join(code, session.accessToken); }
+    try { const uploaded = teacher && banner ? await userApi.upload(banner, session.accessToken) : undefined; item = teacher ? await classroomApi.create(value, session.accessToken, uploaded?.fileId) : await classroomApi.join(code, session.accessToken); }
     catch (error) { if (error instanceof ClassroomTimeoutError) setRevision(current => current + 1); throw error; }
     if (!item) throw new Error('수업 결과를 확인할 수 없어요.');
     const summary = toSummary(item, teacher);
@@ -59,8 +60,7 @@ export default function Home() {
   async function removeClass(item: ClassSummary) {
     if (item.source === 'server') {
       if (!session) throw new Error('로그인이 필요해요.');
-      if (teacher) throw new Error('수업 삭제 기능은 준비 중이에요.');
-      try { await classroomApi.leave(item.id, session.accessToken); }
+      try { await (teacher ? classroomApi.remove(item.id, session.accessToken) : classroomApi.leave(item.id, session.accessToken)); }
       catch (error) { if (error instanceof ClassroomTimeoutError) setRevision(current => current + 1); throw error; }
       setResult(previous => previous?.token === session.accessToken && previous.items ? { ...previous, items: previous.items.filter(existing => existing.id !== item.id) } : previous);
       setRevision(value => value + 1);

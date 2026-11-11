@@ -1,7 +1,8 @@
 import { jsonBody, requestRaw, withRequestTimeout } from './http';
 import { scheduleDates, studentScheduleDates, validateScheduleList, type Schedule } from './schedule';
 
-export type Classroom = { id: number; name: string; classCode: string | null; teacherName: string; createdAt: string };
+export type Classroom = { id: number; name: string; classCode: string | null; teacherName: string; bannerImageUrl?: string | null; createdAt: string };
+export type ClassStudent = { studentId: number; name: string; profileImageUrl: string | null; makeupCount: number; absenceCount: number; lastAbsenceDate: string | null };
 export type ClassroomHome = { classroomId: number; name: string; classCode: string | null; teacherName: string; memberCount: number; createdAt: string; calendar: Schedule[] };
 export function classroomCalendarDates(home: ClassroomHome | undefined, classId: number, studentId?: number): string[] {
   if (!home || home.classroomId !== classId) throw new Error('수업 일정을 확인할 수 없어요.');
@@ -37,7 +38,11 @@ export async function classroomRequest<T>(path: string, options: RequestInit, to
 }
 export const classroomApi = {
   list: (token: string) => classroomRequest<Classroom[]>('/api/class', {}, token),
-  create: (name: string, token: string) => classroomRequest<Classroom>('/api/class', { method: 'POST', ...jsonBody({ name }) }, token),
+  create: (name: string, token: string, bannerImageId?: number) => classroomRequest<Classroom>('/api/class', { method: 'POST', ...jsonBody({ name, ...(bannerImageId ? { bannerImageId } : {}) }) }, token),
+  students: (id: number, token: string) => classroomRequest<ClassStudent[]>(`/api/class/${id}/students`, {}, token),
+  remove: (id: number, token: string) => classroomRequest<void>(`/api/class/${id}`, { method: 'DELETE' }, token),
+  setBanner: (id: number, bannerImageId: number, token: string) => classroomRequest<Classroom>(`/api/class/${id}/banner`, { method: 'PUT', ...jsonBody({ bannerImageId }) }, token),
+  removeBanner: (id: number, token: string) => classroomRequest<void>(`/api/class/${id}/banner`, { method: 'DELETE' }, token),
   join: (classCode: string, token: string) => classroomRequest<Classroom>('/api/class/join', { method: 'POST', ...jsonBody({ classCode }) }, token),
   leave: (id: number, token: string) => classroomRequest<void>(`/api/class/${id}/leave`, { method: 'DELETE' }, token),
   home: (id: number, year: number, month: number, token: string) => classroomRequest<ClassroomHome>(`/api/class/${id}?year=${year}&month=${month}`, {}, token),

@@ -13,7 +13,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 type Role = 'student' | 'teacher';
 
-export function HomeScreen({ role, classes = [], notifications, notificationActions, onSubmitClass, onRemoveClass, listStatus, listError, onRetry }: { role: Role; classes?: ClassSummary[]; notifications?: NotificationItem[]; notificationActions?: NotificationActions; onSubmitClass?: (value: string, bannerUri?: string) => Promise<void> | void; onRemoveClass?: (item: ClassSummary) => Promise<void> | void; listStatus?: string; listError?: string; onRetry?: () => void }) {
+export function HomeScreen({ role, classes = [], notifications, notificationActions, onSubmitClass, onRemoveClass, listStatus, listError, onRetry }: { role: Role; classes?: ClassSummary[]; notifications?: NotificationItem[]; notificationActions?: NotificationActions; onSubmitClass?: (value: string, banner?: ImagePicker.ImagePickerAsset) => Promise<void> | void; onRemoveClass?: (item: ClassSummary) => Promise<void> | void; listStatus?: string; listError?: string; onRetry?: () => void }) {
   const { session } = useSession();
   const [month, setMonth] = useState(() => { const now = new Date(); return new Date(now.getFullYear(), now.getMonth(), 1); });
   const [calendarResult, setCalendarResult] = useState<{ token: string; userId: number; ids: string; monthKey: string; revision: number; dates: Record<number, string[]>; failed: boolean; complete: boolean } | null>(null);
@@ -57,15 +57,14 @@ export function HomeScreen({ role, classes = [], notifications, notificationActi
     if (!onSubmitClass) return Alert.alert('준비 중', `${action} 기능은 준비 중이에요.`);
     submitting.current = true;
     setBusy(true);
-    try { await onSubmitClass(value.trim(), banner?.uri); setModalVisible(false); }
+    try { await onSubmitClass(value.trim(), banner ?? undefined); setModalVisible(false); }
     catch (e) { Alert.alert(`${action} 실패`, e instanceof Error ? e.message : '다시 시도해주세요.'); }
     finally { submitting.current = false; setBusy(false); }
   }
   async function selectBanner() {
-    if (session) return Alert.alert('준비 중', '수업 배너 저장 기능은 준비 중이에요.');
     try {
       const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], allowsEditing: true, aspect: [4, 1], quality: 0.8 });
-      if (!result.canceled) setBanner(result.assets[0]);
+      if (!result.canceled) { if (result.assets[0].fileSize && result.assets[0].fileSize > 5 * 1024 * 1024) return Alert.alert('5MB 이하의 사진을 선택해주세요.'); setBanner(result.assets[0]); }
     } catch { Alert.alert('사진을 선택하지 못했어요.'); }
   }
   return <SafeAreaView edges={['top', 'bottom']} style={styles.safe}>
