@@ -25,4 +25,6 @@ REFIT_ALLOW_HTTP=1 npx expo run:ios
 REFIT_ALLOW_HTTP=1 npx expo run:android
 ```
 
-로그인·회원가입·토큰 갱신 API가 아직 없어 인증이 필요한 기능은 실제 토큰 발급 후에 검증할 수 있습니다. 수업·결석·보강·출석·알림 기능은 서버가 제공되지 않아 화면과 연결 지점만 준비되어 있습니다.
+서버 인증, 수업, 공지, 일정, 출결, 보강, 알림 API를 사용합니다. 서버는 토큰 재발급을 지원하지 않으므로 accessToken 만료 시 다시 로그인해야 합니다.
+
+NFC 출석은 `react-native-nfc-manager` 네이티브 모듈이 필요하므로 Expo Go가 아닌 iOS 또는 Android 개발 빌드를 사용해야 합니다. 선생님은 수업의 NFC 관리에서 태그를 생성·연결하고 별도의 NFC 쓰기 도구로 토큰 또는 URL을 태그에 기록합니다. 실제 태그 형식과 서버 통신은 배포된 서버 및 NFC 지원 실기기에서 확인해야 합니다.
