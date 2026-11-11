@@ -1,3 +1,4 @@
+import * as ImagePicker from 'expo-image-picker';
 import type { ImagePickerAsset } from 'expo-image-picker';
 import { userApi } from '../services/user';
 import { useCallback, useState } from 'react';
@@ -69,6 +70,20 @@ export default function Home() {
     if (teacher) store.deleteClass(item.id);
     else store.leaveClass(item.id, session?.user.name ?? localUser?.name);
   }
+  async function changeBanner(item: ClassSummary, remove: boolean) {
+    if (!session) throw new Error('로그인이 필요해요.');
+    try {
+      if (remove) await classroomApi.removeBanner(item.id, session.accessToken);
+      else {
+        const selected = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], allowsEditing: true, aspect: [4, 1], quality: 0.8 });
+        if (selected.canceled) return;
+        const asset = selected.assets[0];
+        if (asset.fileSize && asset.fileSize > 5 * 1024 * 1024) throw new Error('5MB 이하의 사진을 선택해주세요.');
+        const uploaded = await userApi.upload(asset, session.accessToken);
+        await classroomApi.setBanner(item.id, uploaded.fileId, session.accessToken);
+      }
+    } finally { setRevision(value => value + 1); }
+  }
   const studentName = session?.user.name ?? localUser?.name;
   const localList = (teacher ? store.teacherClasses : store.studentClasses).map(item => {
     const studentId = store.studentOptionsOf(item.id).find(student => student.name === studentName)?.id;
@@ -76,5 +91,5 @@ export default function Home() {
     return { ...item, calendarDates: teacher ? scheduleDates(schedules) : studentScheduleDates(schedules, studentId) };
   });
   const current = result?.token === token ? result : null;
-  return <HomeScreen role={teacher ? 'teacher' : 'student'} classes={session ? current?.items ?? [] : localList} listStatus={session && !current ? '수업 목록을 불러오는 중이에요.' : current?.items?.length ? undefined : current?.error} listError={current?.items?.length ? current.error : undefined} onRetry={current?.error ? () => { setResult(previous => previous?.items?.length ? { ...previous, error: undefined } : null); setRevision(value => value + 1); } : undefined} onSubmitClass={submit} onRemoveClass={removeClass} notifications={store.notifications} notificationActions={{ markAllRead: async () => store.markAllRead() }} />;
+  return <HomeScreen role={teacher ? 'teacher' : 'student'} classes={session ? current?.items ?? [] : localList} listStatus={session && !current ? '수업 목록을 불러오는 중이에요.' : current?.items?.length ? undefined : current?.error} listError={current?.items?.length ? current.error : undefined} onRetry={current?.error ? () => { setResult(previous => previous?.items?.length ? { ...previous, error: undefined } : null); setRevision(value => value + 1); } : undefined} onSubmitClass={submit} onRemoveClass={removeClass} onBanner={changeBanner} notifications={store.notifications} notificationActions={{ markAllRead: async () => store.markAllRead() }} />;
 }
