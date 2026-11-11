@@ -11,6 +11,7 @@ export const noticeApi = {
   remove: (id: number, noticeId: string, token: string) => request<void>(`/api/class/notice/${id}/${noticeId}`, { method: 'DELETE' }, token),
 };
 export const attendanceApi = {
+  nfc: (tagToken: string, scheduleId: number, token: string) => request<Attendance>('/api/class/nfc/attendance', { method: 'POST', ...jsonBody({ token: tagToken, schedule_id: scheduleId }) }, token),
   mine: (id: number, year: number, month: number, token: string) => request<Attendance[]>(`/api/class/attendance/${id}/me?year=${year}&month=${month}`, {}, token),
   list: (id: number, date: string, token: string) => request<AttendanceRow[]>(`/api/class/attendance/${id}?date=${date}`, {}, token),
   stats: (id: number, year: number, month: number, token: string) => request<AttendanceStats[]>(`/api/class/attendance/stats/${id}?year=${year}&month=${month}`, {}, token),

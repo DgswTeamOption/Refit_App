@@ -35,7 +35,13 @@
       ],
       "expo-build-properties",
       "@react-native-community/datetimepicker",
-      "expo-secure-store"
+      "expo-secure-store",
+      [
+        "react-native-nfc-manager",
+        {
+          "nfcPermission": "수업 출석을 위해 NFC 태그를 읽습니다."
+        }
+      ]
     ]
   }
 }

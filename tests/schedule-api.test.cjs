@@ -483,3 +483,32 @@ test('absence lists reject records for another class or student', () => {
   assert.throws(() => validateAbsenceList([{ ...own, student_id: 4 }], 7, 3));
   assert.throws(() => validateAbsenceList([{ ...own, status: 'UNKNOWN' }], 7, 3));
 });
+
+test('new class, notice, attendance, makeup and notification calls follow their contracts', async () => {
+  const { noticeApi, attendanceApi } = loadTypeScript('src/services/classFeatures.ts', { './http': http });
+  const { makeupApi } = loadTypeScript('src/services/makeup.ts', { './http': http });
+  const calls = [];
+  const originalFetch = global.fetch;
+  global.fetch = async (url, options) => {
+    calls.push({ path: new URL(url).pathname + new URL(url).search, method: options.method ?? 'GET', body: options.body && JSON.parse(options.body), authorization: options.headers.get('Authorization') });
+    return { ok: true, status: 200, text: async () => JSON.stringify({ success: true, data: [] }) };
+  };
+  try {
+    await noticeApi.create(4, '제목', '내용', 'token');
+    await attendanceApi.set(4, 9, 'PRESENT', 'token');
+    await attendanceApi.nfc('tag-token', 9, 'token');
+    await makeupApi.slots(4, 'token', 9);
+    await makeupApi.createSlot(4, 9, '2026-11-20T15:00:00', 2, 'token');
+    await makeupApi.cancel(3, 'token');
+    await notificationApi.readAll('token');
+    assert.deepEqual(calls.map(call => [call.method, call.path]), [
+      ['POST', '/api/class/notice/4'], ['PATCH', '/api/class/attendance/4/9'], ['POST', '/api/class/nfc/attendance'],
+      ['GET', '/api/makeups/availability?class_id=4&schedule_id=9'], ['POST', '/api/makeups/availability'],
+      ['PATCH', '/api/makeups/cancel/3'], ['PATCH', '/notifications/read-all'],
+    ]);
+    assert.deepEqual(calls[1].body, { status: 'PRESENT' });
+    assert.deepEqual(calls[2].body, { token: 'tag-token', schedule_id: 9 });
+    assert.deepEqual(calls[4].body, { class_id: 4, schedule_id: 9, makeup_time: ['2026-11-20T15:00:00'], capacity: 2 });
+    assert.ok(calls.every(call => call.authorization === 'Bearer token'));
+  } finally { global.fetch = originalFetch; }
+});
