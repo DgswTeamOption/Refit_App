@@ -64,6 +64,7 @@ export default function ClassPage() {
   const featureKey = `${token}-${id}-${teacher}`;
   useFocusEffect(useCallback(() => {
     if (source !== 'server' || !id || !token) return;
+    void featureRevision;
     let active = true;
     const now = new Date();
     const tasks = [noticeApi.list(id, token), teacher ? classroomApi.students(id, token) : Promise.resolve([]), teacher ? attendanceApi.list(id, today, token) : attendanceApi.mine(id, now.getFullYear(), now.getMonth() + 1, token), attendanceApi.stats(id, now.getFullYear(), now.getMonth() + 1, token)];
