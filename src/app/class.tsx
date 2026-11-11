@@ -147,11 +147,15 @@ export default function ClassPage() {
   const calendarMarks = useMemo(() => {
     const localMarks = attendanceCalendarMarks(requests, attendance, teacher, author);
     if (source !== 'server') return localMarks;
+    for (const item of serverFeatures?.attendance ?? []) {
+      const date = item.attendance_date.slice(0, 10);
+      if (/^\d{4}-\d{2}-\d{2}$/.test(date)) (localMarks[date] ??= []).push(item.status === 'ABSENT' ? 'absence' : 'attendance');
+    }
     for (const item of currentAbsences?.items ?? []) {
-      if (item.status === 'APPROVED' && /^\d{4}-\d{2}-\d{2}$/.test(item.absence_date)) localMarks[item.absence_date] = ['absence'];
+      if (item.status === 'APPROVED' && /^\d{4}-\d{2}-\d{2}$/.test(item.absence_date)) (localMarks[item.absence_date] ??= []).push('absence');
     }
     return localMarks;
-  }, [requests, attendance, teacher, author, source, currentAbsences]);
+  }, [requests, attendance, teacher, author, source, currentAbsences, serverFeatures]);
   const serverTeacherRows: Partial<Record<TeacherTab, TeacherRow[]>> = { ...teacherRows, 학생: (serverFeatures?.students ?? []).map(student => ({ id: String(student.studentId), cells: [student.name, `${student.makeupCount}/${student.absenceCount}`, student.lastAbsenceDate ?? '—'] })), 출석: (serverFeatures?.attendanceRows ?? []).map(row => ({ id: String(row.schedule_id), cells: [row.student_name, row.status === 'PRESENT' ? '출석' : row.status === 'ABSENT' ? '결석' : row.status === 'LATE' ? '지각' : '미체크'], actions: ['출석' as const, '결석' as const] })), 결석정보: (currentAbsences?.items ?? []).map(item => ({ id: String(item.id), cells: [item.student_name || `학생 #${item.student_id}`, item.absence_date, item.reason, item.status === 'APPROVED' ? { label: '승인', tone: 'blue' as const } : item.status === 'REJECTED' ? { label: '거절', tone: 'red' as const } : { label: item.status === 'CANCELED' ? '취소' : '대기중', tone: 'neutral' as const }], reasonDetail: item.reason, actions: item.status === 'PENDING' ? ['승인' as const, '거절' as const] : undefined })) };
 
   return <ClassScreen
