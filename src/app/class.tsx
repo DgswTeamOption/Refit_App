@@ -177,6 +177,7 @@ export default function ClassPage() {
     scheduleStudents={localId === undefined ? (serverFeatures?.students ?? []).map(student => ({ id: student.studentId, name: student.name })) : store.studentOptionsOf(localId)}
     localSchedules={localId === undefined ? undefined : store.schedulesOf(localId)}
     onCreateLocalSchedule={localId === undefined ? undefined : input => addSchedule(localId, input)}
+    onAttendanceChanged={refreshFeatures}
     attendanceRows={localId === undefined ? (serverFeatures?.attendance ?? []).map(a => ({ id: String(a.id), cells: [a.attendance_date, a.status === 'PRESENT' ? '출석' : a.status === 'ABSENT' ? '결석' : a.status === 'LATE' ? '지각' : '미체크'] })) : attendance.filter(a => a.student === author).map(a => ({ id: `${a.student}-${a.date}`, cells: [a.date, { label: a.status === 'present' ? '출석' : '결석', tone: a.status === 'present' ? 'blue' as const : 'red' as const }] }))}
     attendanceSummary={localId === undefined ? (serverFeatures ? { present: serverFeatures.stats.reduce((sum, row) => sum + row.present_count, 0), absent: serverFeatures.stats.reduce((sum, row) => sum + row.absent_count, 0) } : undefined) : { present: attendance.filter(a => a.status === 'present' && a.date.slice(0, 7) === today.slice(0, 7)).length, absent: attendance.filter(a => a.status === 'absent' && a.date.slice(0, 7) === today.slice(0, 7)).length }}
     availability={availability}
