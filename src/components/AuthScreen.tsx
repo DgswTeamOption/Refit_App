@@ -28,6 +28,7 @@ export function AuthScreen({ mode }: { mode: Mode }) {
   const [role, setRole] = useState<'student' | 'teacher'>(signupDraft?.role === 'TEACHER' ? 'teacher' : 'student');
   const [focused, setFocused] = useState(false);
   const [googleRegistered, setGoogleRegistered] = useState(false);
+  const [googleBusy, setGoogleBusy] = useState(false);
   const googleInFlight = useRef(false);
   const remaining = Math.max(0, Math.ceil((expiresAt - now) / 1000));
   useEffect(() => {
@@ -59,6 +60,7 @@ export function AuthScreen({ mode }: { mode: Mode }) {
   async function continueWithGoogle() {
     if (googleInFlight.current) return;
     googleInFlight.current = true;
+    setGoogleBusy(true);
     setPendingGoogleToken(null);
     setBusy(true);
     try {
@@ -70,13 +72,14 @@ export function AuthScreen({ mode }: { mode: Mode }) {
         setSignupDraft(null); setPendingGoogleToken(idToken); router.push('/role');
       }
     } catch (error) { Alert.alert('Google 로그인 실패', error instanceof Error ? error.message : '다시 시도해주세요.'); }
-    finally { googleInFlight.current = false; setBusy(false); }
+    finally { googleInFlight.current = false; setGoogleBusy(false); setBusy(false); }
   }
   async function submit() {
     if (mode === 'role') {
       if (pendingGoogleToken) {
         if (googleInFlight.current) return;
         googleInFlight.current = true;
+        setGoogleBusy(true);
         setBusy(true);
         try {
           if (!googleRegistered) {
@@ -94,7 +97,7 @@ export function AuthScreen({ mode }: { mode: Mode }) {
           }
           finishLogin(await googleSession(pendingGoogleToken));
         } catch (error) { Alert.alert('Google 회원가입 실패', error instanceof Error && error.message ? error.message : '다시 시도해주세요.'); }
-        finally { googleInFlight.current = false; setBusy(false); }
+        finally { googleInFlight.current = false; setGoogleBusy(false); setBusy(false); }
         return;
       }
       if (!signupDraft) return Alert.alert('회원가입 정보를 먼저 입력해주세요.');
@@ -135,14 +138,14 @@ export function AuthScreen({ mode }: { mode: Mode }) {
           {mode === 'role' ? <>
             {(['student', 'teacher'] as const).map(item => <Pressable key={item} accessibilityRole="radio" accessibilityState={{ checked: role === item }} onPress={() => setRole(item)} style={[styles.role, role === item && styles.roleSelected]}><Text style={styles.roleTitle}>{item === 'student' ? '학생' : '선생님'}</Text><Text style={styles.subtitle}>{item === 'student' ? '수업에 참여하고 결석·보강을 신청해요' : '수업을 만들고 출석·보강을 관리해요'}</Text></Pressable>)}
           </> : <>
-            <Button label="Google로 계속하기" variant="outline" disabled={busy} onPress={continueWithGoogle} />
+            <Button label={googleBusy ? 'Google 로그인 중...' : 'Google로 계속하기'} variant="outline" disabled={busy} onPress={continueWithGoogle} />
             <View style={styles.divider}><View style={styles.line} /><Text style={styles.or}>또는</Text><View style={styles.line} /></View>
             {mode === 'signup' && <View style={styles.field}><Text style={styles.label}>이름</Text><TextInput value={name} onChangeText={setName} placeholder="이름을 입력해주세요" placeholderTextColor="#999" style={styles.input} accessibilityLabel="이름" /></View>}
             <View style={styles.field}><Text style={styles.label}>이메일</Text><View style={styles.row}><TextInput value={email} onChangeText={setEmail} placeholder="example@email.com" placeholderTextColor="#999" keyboardType="email-address" autoCapitalize="none" autoCorrect={false} style={[styles.input, styles.flexInput]} accessibilityLabel="이메일" /><View style={styles.sendButton}><Button label={sent ? '다시 받기' : '인증코드 받기'} variant={sent && remaining > 0 ? 'neutral' : 'secondary'} disabled={busy || (sent && remaining > 0)} onPress={sendCode} /></View></View>{sent && <Text style={styles.sentMessage}>인증코드를 보냈어요. 메일함을 확인해주세요.</Text>}</View>
             <View style={styles.field}><Text style={styles.label}>인증코드</Text><View style={[styles.codeInput, focused && styles.focused]}><TextInput value={code} onChangeText={setCode} onFocus={() => setFocused(true)} onBlur={() => setFocused(false)} placeholder="6자리 숫자 입력" placeholderTextColor="#999" keyboardType="number-pad" maxLength={6} style={styles.codeText} accessibilityLabel="인증코드" />{sent && remaining > 0 && <Text style={styles.timer}>{String(Math.floor(remaining / 60)).padStart(2, '0')}:{String(remaining % 60).padStart(2, '0')}</Text>}</View>{sent && <Text style={styles.helper}>5분 안에 입력해주세요. 메일이 없다면 스팸함을 확인해주세요.</Text>}</View>
           </>}
           <View style={styles.spacer} />
-          <Button label={mode === 'role' ? '시작하기' : title} disabled={busy} onPress={submit} />
+          <Button label={mode === 'role' ? (googleBusy ? '가입 처리 중...' : '시작하기') : title} disabled={busy} onPress={submit} />
           {mode !== 'role' && <Text style={styles.switchText}>{mode === 'login' ? '계정이 없나요? ' : '이미 계정이 있나요? '}<Text accessibilityRole="link" style={styles.switchLink} onPress={() => router.replace(mode === 'login' ? '/signup' : '/')}>{mode === 'login' ? '회원가입' : '로그인'}</Text></Text>}
         </View>
         <View style={styles.footer}>{([['서비스 소개', '/about'], ['FAQ', '/faq'], ['이용약관', '/terms'], ['개인정보 처리방침', '/privacy']] as const).map(([label, route], index) => <View key={route} style={styles.footerItem}>{index > 0 && <Text style={styles.footerText}>·</Text>}<Pressable accessibilityRole="link" accessibilityLabel={label} hitSlop={6} onPress={() => router.push(route)}><Text style={styles.footerText}>{label}</Text></Pressable></View>)}</View>
