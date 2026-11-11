@@ -8,7 +8,8 @@ import type { TeacherTab } from '../components/TeacherManagement';
 import type { TeacherRow } from '../components/TeacherTable';
 import { attendanceCalendarMarks, latestAbsenceLabel } from '../services/calendarMarks';
 import { parseServerDate } from '../services/schedule';
-import { classroomApi } from '../services/classroom';
+import { noticeApi, attendanceApi, type ServerNotice, type Attendance, type AttendanceRow, type AttendanceStats } from '../services/classFeatures';
+import { classroomApi, type ClassStudent } from '../services/classroom';
 import { absenceApi, absenceStatusLabel, validateAbsenceList, type AbsenceListItem } from '../services/absence';
 import { useSession } from '../auth/Session';
 import { useClasses, type RequestKind } from '../store/Classes';
@@ -58,11 +59,28 @@ export default function ClassPage() {
   const requests = useMemo(() => localId === undefined ? [] : requestsOf(localId), [localId, requestsOf]);
   const availability = useMemo(() => localId === undefined ? [] : availabilityOf(localId), [localId, availabilityOf]);
 
-  const noticeActions = useMemo<NoticeActions | undefined>(() => localId === undefined ? undefined : {
+  const [featureRevision, setFeatureRevision] = useState(0);
+  const [features, setFeatures] = useState<{ key: string; students: ClassStudent[]; notices: ServerNotice[]; attendance: Attendance[]; attendanceRows: AttendanceRow[]; stats: AttendanceStats[]; error?: string } | null>(null);
+  const featureKey = `${token}-${id}-${teacher}`;
+  useFocusEffect(useCallback(() => {
+    if (source !== 'server' || !id || !token) return;
+    let active = true;
+    const now = new Date();
+    const tasks = [noticeApi.list(id, token), teacher ? classroomApi.students(id, token) : Promise.resolve([]), teacher ? attendanceApi.list(id, today, token) : attendanceApi.mine(id, now.getFullYear(), now.getMonth() + 1, token), attendanceApi.stats(id, now.getFullYear(), now.getMonth() + 1, token)];
+    Promise.allSettled(tasks).then(([notices, students, attendanceData, stats]) => {
+      if (!active) return;
+      const errors = [notices, students, attendanceData, stats].filter(result => result.status === 'rejected');
+      setFeatures({ key: featureKey, notices: notices.status === 'fulfilled' && Array.isArray(notices.value) ? notices.value as ServerNotice[] : [], students: students.status === 'fulfilled' && Array.isArray(students.value) ? students.value as ClassStudent[] : [], attendance: !teacher && attendanceData.status === 'fulfilled' && Array.isArray(attendanceData.value) ? attendanceData.value as Attendance[] : [], attendanceRows: teacher && attendanceData.status === 'fulfilled' && Array.isArray(attendanceData.value) ? attendanceData.value as AttendanceRow[] : [], stats: stats.status === 'fulfilled' && Array.isArray(stats.value) ? stats.value as AttendanceStats[] : [], error: errors.length ? '일부 수업 정보를 불러오지 못했어요. 다시 수업에 들어와 주세요.' : undefined });
+    });
+    return () => { active = false; };
+  }, [source, id, token, teacher, today, featureRevision, featureKey]));
+  const serverFeatures = features?.key === featureKey ? features : null;
+  const refreshFeatures = () => setFeatureRevision(value => value + 1);
+  const noticeActions = useMemo<NoticeActions | undefined>(() => localId === undefined ? (id && token && teacher ? { create: async input => { await noticeApi.create(id, input.title, input.body, token); refreshFeatures(); }, update: async (nid, input) => { await noticeApi.update(id, nid, input.title, input.body, token); refreshFeatures(); }, remove: async nid => { await noticeApi.remove(id, nid, token); refreshFeatures(); } } : undefined) : {
     create: async input => addNotice(localId, input, author),
     update: async (nid, input) => updateNotice(localId, nid, input),
     remove: async nid => removeNotice(localId, nid),
-  }, [localId, author, addNotice, updateNotice, removeNotice]);
+  }, [localId, id, token, teacher, author, addNotice, updateNotice, removeNotice]);
 
   const requestActions = useMemo<Partial<Record<RequestKind, StudentRequestActions>> | undefined>(() => {
     if (localId === undefined) {
@@ -133,13 +151,14 @@ export default function ClassPage() {
     }
     return localMarks;
   }, [requests, attendance, teacher, author, source, currentAbsences]);
-  const serverTeacherRows: Partial<Record<TeacherTab, TeacherRow[]>> = { ...teacherRows, 결석정보: (currentAbsences?.items ?? []).map(item => ({ id: String(item.id), cells: [item.student_name || `학생 #${item.student_id}`, item.absence_date, item.reason, item.status === 'APPROVED' ? { label: '승인', tone: 'blue' as const } : item.status === 'REJECTED' ? { label: '거절', tone: 'red' as const } : { label: item.status === 'CANCELED' ? '취소' : '대기중', tone: 'neutral' as const }], reasonDetail: item.reason, actions: item.status === 'PENDING' ? ['승인' as const, '거절' as const] : undefined })) };
+  const serverTeacherRows: Partial<Record<TeacherTab, TeacherRow[]>> = { ...teacherRows, 학생: (serverFeatures?.students ?? []).map(student => ({ id: String(student.studentId), cells: [student.name, `${student.makeupCount}/${student.absenceCount}`, student.lastAbsenceDate ?? '—'] })), 출석: (serverFeatures?.attendanceRows ?? []).map(row => ({ id: String(row.schedule_id), cells: [row.student_name, row.status === 'PRESENT' ? '출석' : row.status === 'ABSENT' ? '결석' : row.status === 'LATE' ? '지각' : '미체크'], actions: ['출석' as const, '결석' as const] })), 결석정보: (currentAbsences?.items ?? []).map(item => ({ id: String(item.id), cells: [item.student_name || `학생 #${item.student_id}`, item.absence_date, item.reason, item.status === 'APPROVED' ? { label: '승인', tone: 'blue' as const } : item.status === 'REJECTED' ? { label: '거절', tone: 'red' as const } : { label: item.status === 'CANCELED' ? '취소' : '대기중', tone: 'neutral' as const }], reasonDetail: item.reason, actions: item.status === 'PENDING' ? ['승인' as const, '거절' as const] : undefined })) };
 
   return <ClassScreen
-    role={teacher ? 'teacher' : 'student'} name={currentHome?.name || name || '수업'} classId={id} loadError={currentHome?.error}
-    notices={localId === undefined ? [] : store.noticesOf(localId)} noticeActions={noticeActions}
+    role={teacher ? 'teacher' : 'student'} name={currentHome?.name || name || '수업'} classId={id} loadError={currentHome?.error ?? serverFeatures?.error}
+    notices={localId === undefined ? (serverFeatures?.notices ?? []).map(item => ({ id: String(item.noticeId), title: item.title, body: item.content, author: item.writerId === session?.user.id ? author : '선생님', dateLabel: item.createdAt, canEdit: item.writerId === session?.user.id })) : store.noticesOf(localId)} noticeActions={noticeActions}
     studentRequests={studentRequests} requestActions={requestActions} teacherRows={source === 'server' ? serverTeacherRows : teacherRows} serverDataUnavailable={localId === undefined} absenceStatus={absenceStatus} onRefreshAbsences={source === 'server' ? () => setAbsenceRevision(value => value + 1) : undefined} onRetryAbsences={currentAbsences?.error ? () => setAbsenceRevision(value => value + 1) : undefined}
     onTeacherAction={localId === undefined ? (source === 'server' && teacher && token ? async (tab, rowId, action) => {
+      if (tab === '출석' && (action === '출석' || action === '결석') && id) { try { await attendanceApi.set(id, Number(rowId), action === '출석' ? 'PRESENT' : 'ABSENT', token); } finally { refreshFeatures(); } return; }
       if (tab !== '결석정보' || (action !== '승인' && action !== '거절')) throw new Error('해당 기능은 준비 중이에요.');
       const absenceId = Number(rowId);
       if (!Number.isSafeInteger(absenceId) || absenceId <= 0 || !currentAbsences?.items?.some(item => item.id === absenceId && item.class_id === id && item.status === 'PENDING')) throw new Error('대기 중인 결석 신청을 다시 확인해주세요.');
@@ -150,11 +169,11 @@ export default function ClassPage() {
       else if ((tab === '결석정보' || tab === '보강') && (action === '승인' || action === '거절')) setRequestStatus(localId, rowId, action === '승인' ? 'approved' : 'rejected');
       else if (tab === '출석' && (action === '출석' || action === '결석')) markAttendance(localId, rowId, today, action === '출석' ? 'present' : 'absent');
     }}
-    scheduleStudents={localId === undefined ? [] : store.studentOptionsOf(localId)}
+    scheduleStudents={localId === undefined ? (serverFeatures?.students ?? []).map(student => ({ id: student.studentId, name: student.name })) : store.studentOptionsOf(localId)}
     localSchedules={localId === undefined ? undefined : store.schedulesOf(localId)}
     onCreateLocalSchedule={localId === undefined ? undefined : input => addSchedule(localId, input)}
-    attendanceRows={attendance.filter(a => a.student === author).map(a => ({ id: `${a.student}-${a.date}`, cells: [a.date, { label: a.status === 'present' ? '출석' : '결석', tone: a.status === 'present' ? 'blue' as const : 'red' as const }] }))}
-    attendanceSummary={localId === undefined ? undefined : { present: attendance.filter(a => a.status === 'present' && a.date.slice(0, 7) === today.slice(0, 7)).length, absent: attendance.filter(a => a.status === 'absent' && a.date.slice(0, 7) === today.slice(0, 7)).length }}
+    attendanceRows={localId === undefined ? (serverFeatures?.attendance ?? []).map(a => ({ id: String(a.id), cells: [a.attendance_date, a.status === 'PRESENT' ? '출석' : a.status === 'ABSENT' ? '결석' : a.status === 'LATE' ? '지각' : '미체크'] })) : attendance.filter(a => a.student === author).map(a => ({ id: `${a.student}-${a.date}`, cells: [a.date, { label: a.status === 'present' ? '출석' : '결석', tone: a.status === 'present' ? 'blue' as const : 'red' as const }] }))}
+    attendanceSummary={localId === undefined ? (serverFeatures ? { present: serverFeatures.stats.reduce((sum, row) => sum + row.present_count, 0), absent: serverFeatures.stats.reduce((sum, row) => sum + row.absent_count, 0) } : undefined) : { present: attendance.filter(a => a.status === 'present' && a.date.slice(0, 7) === today.slice(0, 7)).length, absent: attendance.filter(a => a.status === 'absent' && a.date.slice(0, 7) === today.slice(0, 7)).length }}
     availability={availability}
     onSaveAvailability={localId === undefined ? undefined : async (input, availabilityId) => { if (availabilityId) updateAvailability(localId, availabilityId, input); else addAvailability(localId, input); }}
     notifications={store.notifications} notificationActions={{ markAllRead: async () => markAllRead() }}
