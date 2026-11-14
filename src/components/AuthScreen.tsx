@@ -16,6 +16,13 @@ function Button({ label, variant = 'primary', onPress, disabled = false }: { lab
   return <Pressable accessibilityRole="button" accessibilityState={{ disabled }} disabled={disabled} onPress={onPress} style={[styles.button, styles[variant]]}><Text style={[styles.buttonText, variant === 'secondary' && styles.blueText, variant === 'outline' && styles.darkText, variant === 'neutral' && styles.neutralText]}>{label}</Text></Pressable>;
 }
 
+function errorText(error: unknown) {
+  if (!(error instanceof Error)) return '다시 시도해주세요.';
+  if (error instanceof ApiError) return `${error.message}\n(HTTP ${error.status})`;
+  const code = (error as { code?: unknown }).code;
+  return code === undefined ? `${error.message}\n(${error.name})` : `${error.message}\n(${error.name}: ${String(code)})`;
+}
+
 export function AuthScreen({ mode }: { mode: Mode }) {
   const { signupDraft, setSignupDraft, setLocalUser, setSession, pendingGoogleToken, setPendingGoogleToken } = useSession();
   const [name, setName] = useState('');
@@ -71,7 +78,7 @@ export function AuthScreen({ mode }: { mode: Mode }) {
         if (!(error instanceof GoogleUserNotRegistered)) throw error;
         setSignupDraft(null); setPendingGoogleToken(idToken); router.push('/role');
       }
-    } catch (error) { Alert.alert('Google 로그인 실패', error instanceof Error ? error.message : '다시 시도해주세요.'); }
+    } catch (error) { Alert.alert('Google 로그인 실패', errorText(error)); }
     finally { googleInFlight.current = false; setGoogleBusy(false); setBusy(false); }
   }
   async function submit() {
@@ -124,7 +131,7 @@ export function AuthScreen({ mode }: { mode: Mode }) {
       else finishLogin(await emailSession(sentEmail, code));
     } catch (error) {
       if (mode === 'login' && (error instanceof EmailLoginCompletionError || (error instanceof ApiError && (error.status === 404 || error.status === 429)))) { setExpiresAt(0); setSentEmail(''); setCode(''); }
-      Alert.alert('인증 실패', error instanceof Error ? error.message : '다시 시도해주세요.');
+      Alert.alert('인증 실패', errorText(error));
     }
     finally { setBusy(false); }
   }
