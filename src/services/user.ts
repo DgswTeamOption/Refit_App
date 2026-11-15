@@ -13,7 +13,9 @@ export const userApi = {
     if (Platform.OS === 'web' && asset.file) form.append('file', asset.file, asset.file.name);
     else {
       const { File } = await import('expo-file-system');
-      form.append('file', new File(asset.uri));
+      const file = new File(asset.uri);
+      // Expo's fetch only accepts Blob-like parts (bytes/name/type), so pass the picker's name and MIME type explicitly.
+      form.append('file', { name: asset.fileName ?? 'profile.jpg', type: asset.mimeType ?? 'image/jpeg', bytes: () => file.bytes() } as unknown as Blob);
     }
     const uploaded = await request<{ fileId: number; imageUrl: string }>('/api/files/images', { method: 'POST', body: form }, token);
     if (!uploaded?.imageUrl) throw new Error('업로드 결과를 확인할 수 없어요.');
