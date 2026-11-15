@@ -16,7 +16,7 @@ export function ProfileMenu() {
     {open && <View style={styles.menu}>
       <Text style={styles.name} numberOfLines={1}>{name}</Text>
       <View style={styles.divider} />
-      <Pressable accessibilityRole="button" style={styles.action} onPress={() => { setOpen(false); router.push('/profile'); }}><Text style={styles.actionText}>정보수정</Text></Pressable>
+      <Pressable accessibilityRole="button" style={styles.action} onPress={() => { setOpen(false); router.push('/profile'); }}><Text style={styles.actionText}>정보 수정</Text></Pressable>
       <Pressable accessibilityRole="button" style={styles.action} onPress={() => { setOpen(false); setSession(null); setLocalUser(null); router.replace('/'); }}><Text style={styles.actionText}>로그아웃</Text></Pressable>
     </View>}
   </View>;
