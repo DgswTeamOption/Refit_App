@@ -11,7 +11,10 @@ export const userApi = {
   upload: async (asset: ImagePickerAsset, token: string) => {
     const form = new FormData();
     if (Platform.OS === 'web' && asset.file) form.append('file', asset.file, asset.file.name);
-    else form.append('file', { uri: asset.uri, name: asset.fileName ?? 'profile.jpg', type: asset.mimeType ?? 'image/jpeg' } as unknown as Blob);
+    else {
+      const { File } = await import('expo-file-system');
+      form.append('file', new File(asset.uri));
+    }
     const uploaded = await request<{ fileId: number; imageUrl: string }>('/api/files/images', { method: 'POST', body: form }, token);
     if (!uploaded?.imageUrl) throw new Error('업로드 결과를 확인할 수 없어요.');
     return uploaded;
