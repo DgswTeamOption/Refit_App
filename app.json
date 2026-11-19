@@ -42,6 +42,16 @@
           "nfcPermission": "수업 출석을 위해 NFC 태그를 읽습니다."
         }
       ]
-    ]
+    ],
+    "extra": {
+      "router": {
+        "asyncRoutes": {
+          "web": true
+        }
+      },
+      "eas": {
+        "projectId": "b1970af9-98cc-4c27-9667-23c26794efaf"
+      }
+    }
   }
 }
