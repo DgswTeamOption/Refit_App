@@ -153,8 +153,87 @@ test('profile updates expose the saved server profile', async () => {
   global.fetch = async () => new Response(JSON.stringify({ success: true, data: updated }), { status: 200 });
   try {
     assert.deepEqual(await userApi.updateName('새 이름', 'token'), updated);
-    assert.deepEqual(await userApi.updateImage('/uploads/new.jpg', 'token'), updated);
+    assert.deepEqual(await userApi.updateImage(123, 'token'), updated);
   } finally { global.fetch = originalFetch; }
+});
+
+test('profile image change sends the uploaded file id instead of a URL', async () => {
+  const originalFetch = global.fetch;
+  const calls = [];
+  global.fetch = async (url, options) => {
+    calls.push({ url, options });
+    return new Response(JSON.stringify({ success: true, data: { id: 42 } }), { status: 200 });
+  };
+  try {
+    await userApi.updateImage(123, 'token');
+    assert.equal(calls[0].url, 'http://localhost:8080/api/setting/profile-image');
+    assert.equal(calls[0].options.method, 'PATCH');
+    assert.deepEqual(JSON.parse(calls[0].options.body), { profileImageId: 123 });
+  } finally { global.fetch = originalFetch; }
+});
+
+test('error responses expose the server error code', async () => {
+  const originalFetch = global.fetch;
+  global.fetch = async () => new Response(JSON.stringify({ timestamp: '2026-11-18T10:00:00', status: 404, code: 'CLASS_NOT_FOUND', message: '수업을 찾을 수 없어요.' }), { status: 404 });
+  try {
+    await assert.rejects(scheduleApi.list(7, 'token'), error => error instanceof http.ApiError && error.status === 404 && error.code === 'CLASS_NOT_FOUND' && error.message === '수업을 찾을 수 없어요.');
+  } finally { global.fetch = originalFetch; }
+});
+
+test('refresh and logout send the refresh token in the body without a client header', async () => {
+  const originalFetch = global.fetch;
+  const calls = [];
+  global.fetch = async (url, options) => {
+    calls.push({ url, options });
+    return new Response(JSON.stringify({ success: true, data: url.endsWith('/refresh') ? { accessToken: 'new-access', refreshToken: 'new-refresh' } : null }), { status: 200 });
+  };
+  try {
+    assert.deepEqual(await authApi.refresh('old-refresh'), { accessToken: 'new-access', refreshToken: 'new-refresh' });
+    await authApi.logout('new-refresh');
+    assert.equal(calls[0].url, 'http://localhost:8080/api/auth/refresh');
+    assert.equal(calls[0].options.method, 'POST');
+    assert.deepEqual(JSON.parse(calls[0].options.body), { refreshToken: 'old-refresh' });
+    assert.equal(calls[1].url, 'http://localhost:8080/api/auth/logout');
+    assert.deepEqual(JSON.parse(calls[1].options.body), { refreshToken: 'new-refresh' });
+    assert.ok(calls.every(call => !call.options.headers.has('X-Client') && !call.options.headers.has('Authorization')));
+  } finally { global.fetch = originalFetch; }
+});
+
+test('an expired access token is renewed once and the request is retried', async () => {
+  const originalFetch = global.fetch;
+  const sent = [];
+  global.fetch = async (_url, options) => {
+    const authorization = options.headers.get('Authorization');
+    sent.push(authorization);
+    return authorization === 'Bearer new-access'
+      ? new Response(JSON.stringify({ success: true, data: [] }), { status: 200 })
+      : new Response(JSON.stringify({ status: 401, code: 'TOKEN_EXPIRED', message: '만료' }), { status: 401 });
+  };
+  const rejected = [];
+  const stopListening = http.onUnauthorized(token => rejected.push(token));
+  let renewals = 0;
+  const stopRefreshing = http.setTokenRefresher(async expired => { renewals += 1; return expired === 'old-access' ? 'new-access' : null; });
+  try {
+    assert.deepEqual(await scheduleApi.list(7, 'old-access'), []);
+    assert.deepEqual(sent, ['Bearer old-access', 'Bearer new-access']);
+    assert.equal(renewals, 1);
+    assert.deepEqual(rejected, []);
+    // When the session cannot be renewed the 401 reaches the sign-out handler.
+    await assert.rejects(scheduleApi.list(7, 'revoked-access'), { status: 401 });
+    assert.deepEqual(rejected, ['revoked-access']);
+  } finally { stopRefreshing(); stopListening(); global.fetch = originalFetch; }
+});
+
+test('a network failure while renewing the session does not sign the user out', async () => {
+  const originalFetch = global.fetch;
+  global.fetch = async () => new Response(JSON.stringify({ status: 401, message: '만료' }), { status: 401 });
+  const rejected = [];
+  const stopListening = http.onUnauthorized(token => rejected.push(token));
+  const stopRefreshing = http.setTokenRefresher(async () => { throw new Error('서버에 연결하지 못했어요.'); });
+  try {
+    await assert.rejects(scheduleApi.list(7, 'old-access'), { message: '서버에 연결하지 못했어요.' });
+    assert.deepEqual(rejected, []);
+  } finally { stopRefreshing(); stopListening(); global.fetch = originalFetch; }
 });
 
 test('Google registration and login use an ID token and obtain the server profile', async () => {

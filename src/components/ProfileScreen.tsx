@@ -69,7 +69,7 @@ function ProfileBody({ page, notifications, notificationActions }: ProfileProps)
       if (asset.fileSize && asset.fileSize > 5 * 1024 * 1024) return Alert.alert('5MB 이하의 사진을 선택해주세요.');
       setBusy(true);
       const uploaded = await userApi.upload(asset, session.accessToken);
-      const updated = await userApi.updateImage(uploaded.imageUrl, session.accessToken);
+      const updated = await userApi.updateImage(uploaded.fileId, session.accessToken);
       if (!updated || updated.id !== session.user.id || typeof updated.profileImageUrl !== 'string' || !updated.profileImageUrl) throw new Error('변경 결과를 확인하지 못했어요. 내 정보에서 확인해주세요.');
       setSession(current => current?.accessToken === session.accessToken ? { ...current, user: { ...current.user, profileImageUrl: updated.profileImageUrl } } : current);
       setResult(current => current?.token === session.accessToken && current.userId === session.user.id && current.profile ? { ...current, profile: { ...current.profile, profileImageUrl: updated.profileImageUrl } } : current);
