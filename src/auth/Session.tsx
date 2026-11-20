@@ -1,6 +1,7 @@
 import { router } from 'expo-router';
 import { createContext, useContext, useEffect, useMemo, useRef, useState, type Dispatch, type ReactNode, type SetStateAction } from 'react';
-import { onUnauthorized } from '../services/http';
+import { authApi } from '../services/auth';
+import { ApiError, onUnauthorized, setTokenRefresher } from '../services/http';
 import { ActivityIndicator, Alert, View } from 'react-native';
 import { readStoredSession, writeStoredSession } from './sessionStorage';
 
@@ -30,7 +31,29 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     lastPersistedSession.current = session;
     storageQueue.current = storageQueue.current.then(() => writeStoredSession(session)).catch(() => {});
   }, [hydrated, session]);
+  const refreshing = useRef<Promise<string | null> | null>(null);
   useEffect(() => { currentSession.current = session; }, [session]);
+  useEffect(() => setTokenRefresher(async expiredToken => {
+    const current = currentSession.current;
+    if (!current) return null;
+    // Another request already renewed this session.
+    if (current.accessToken !== expiredToken) return current.accessToken;
+    refreshing.current ??= (async () => {
+      try {
+        const tokens = await authApi.refresh(current.refreshToken);
+        if (!tokens?.accessToken || !tokens.refreshToken) return null;
+        // The server rotates the refresh token, so the new one must replace the stored one.
+        currentSession.current = { ...current, accessToken: tokens.accessToken, refreshToken: tokens.refreshToken };
+        setSession(existing => existing?.accessToken === expiredToken ? { ...existing, accessToken: tokens.accessToken, refreshToken: tokens.refreshToken } : existing);
+        return tokens.accessToken;
+      } catch (error) {
+        // An unreachable server must not sign the user out; only a rejected refresh token does.
+        if (error instanceof ApiError) return null;
+        throw error;
+      } finally { refreshing.current = null; }
+    })();
+    return refreshing.current;
+  }), []);
   useEffect(() => onUnauthorized(token => {
     if (currentSession.current?.accessToken !== token) return;
     currentSession.current = null;

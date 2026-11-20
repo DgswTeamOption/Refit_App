@@ -1,6 +1,6 @@
 import { jwtDecode } from 'jwt-decode';
 import type { Session } from '../auth/Session';
-import { ApiError, jsonBody, request, withRequestTimeout } from './http';
+import { ApiError, jsonBody, request, requestRaw, withRequestTimeout } from './http';
 import { userApi } from './user';
 
 type TokenResponse = { accessToken: string; refreshToken: string };
@@ -28,6 +28,9 @@ export const authApi = {
   loginEmail: (email: string, verificationCode: string) => request<TokenResponse>('/api/auth/login', { method: 'POST', ...jsonBody({ email_id: email, verificationToken: verificationCode }) }),
   registerGoogle: (idToken: string, role: Session['user']['role']) => googleRequest<unknown>('/api/auth/google/register', idToken, { idToken, role }),
   loginGoogle: (idToken: string) => googleRequest<TokenResponse>('/api/auth/google/login', idToken, { idToken }),
+  // The app omits X-Client (the server default), so the refresh token travels in the request body.
+  refresh: (refreshToken: string) => request<TokenResponse>('/api/auth/refresh', { method: 'POST', ...jsonBody({ refreshToken }) }),
+  logout: (refreshToken: string) => requestRaw<unknown>('/api/auth/logout', { method: 'POST', ...jsonBody({ refreshToken }) }),
 };
 
 async function sessionFromTokens(tokens: TokenResponse | undefined, timeoutMs = 15000): Promise<Session> {

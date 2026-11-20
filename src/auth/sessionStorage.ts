@@ -5,7 +5,8 @@ import type { Session } from './Session';
 const key = 'refit.session.v1';
 
 type Claims = { exp?: unknown; userId?: unknown; role?: unknown };
-export function parseStoredSession(value: string | null, now = Date.now()): Session | null {
+// An expired access token is still restored: the first request that gets a 401 renews it with the refresh token.
+export function parseStoredSession(value: string | null): Session | null {
   if (!value) return null;
   try {
     const session: unknown = JSON.parse(value);
@@ -13,7 +14,7 @@ export function parseStoredSession(value: string | null, now = Date.now()): Sess
     const data = session as Partial<Session>;
     if (typeof data.accessToken !== 'string' || typeof data.refreshToken !== 'string' || !data.refreshToken || !data.user || typeof data.user.name !== 'string') return null;
     const claims = jwtDecode<Claims>(data.accessToken);
-    if (typeof claims.exp !== 'number' || !Number.isFinite(claims.exp) || claims.exp * 1000 <= now || !Number.isSafeInteger(claims.userId) || (claims.userId as number) <= 0 || claims.userId !== data.user.id || claims.role !== data.user.role || (claims.role !== 'STUDENT' && claims.role !== 'TEACHER')) return null;
+    if (typeof claims.exp !== 'number' || !Number.isFinite(claims.exp) || !Number.isSafeInteger(claims.userId) || (claims.userId as number) <= 0 || claims.userId !== data.user.id || claims.role !== data.user.role || (claims.role !== 'STUDENT' && claims.role !== 'TEACHER')) return null;
     const photo = data.user.profileImageUrl;
     if (photo !== undefined && photo !== null && typeof photo !== 'string') return null;
     return { accessToken: data.accessToken, refreshToken: data.refreshToken, user: { id: data.user.id, name: data.user.name, role: data.user.role, profileImageUrl: photo ?? null } };

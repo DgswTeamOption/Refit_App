@@ -3,10 +3,18 @@ import { Platform } from 'react-native';
 export const baseUrl = (process.env.EXPO_PUBLIC_API_URL ?? (__DEV__ ? (Platform.OS === 'android' ? 'http://10.0.2.2:8080' : 'http://localhost:8080') : '')).replace(/\/$/, '');
 
 export class ApiError extends Error {
-  constructor(public readonly status: number, message: string) {
+  constructor(public readonly status: number, message: string, public readonly code?: string) {
     super(message);
     this.name = 'ApiError';
   }
+}
+
+// Resolves a fresh access token for an expired one, or null when the session can no longer be renewed.
+type TokenRefresher = (expiredToken: string) => Promise<string | null>;
+let tokenRefresher: TokenRefresher | null = null;
+export function setTokenRefresher(refresher: TokenRefresher): () => void {
+  tokenRefresher = refresher;
+  return () => { if (tokenRefresher === refresher) tokenRefresher = null; };
 }
 
 const unauthorizedListeners = new Set<(token: string) => void>();
@@ -32,7 +40,7 @@ export async function withRequestTimeout<T>(run: (signal: AbortSignal) => Promis
   finally { clearTimeout(timer); }
 }
 
-async function performRequest<T>(path: string, options: RequestInit, accessToken: string | undefined, raw: boolean): Promise<T | undefined> {
+async function performRequest<T>(path: string, options: RequestInit, accessToken: string | undefined, raw: boolean, retried = false): Promise<T | undefined> {
   if (!baseUrl) throw new Error('서버 주소가 설정되지 않았어요.');
   if (!__DEV__ && !baseUrl.startsWith('https://')) throw new Error('배포 서버에는 HTTPS 주소가 필요해요.');
   const headers = new Headers(options.headers);
@@ -43,7 +51,11 @@ async function performRequest<T>(path: string, options: RequestInit, accessToken
     if (error instanceof TypeError) throw new Error('서버에 연결하지 못했어요. 네트워크 연결을 확인해주세요.');
     throw error;
   }
-  if (response.status === 401 && accessToken) unauthorizedListeners.forEach(listener => listener(accessToken));
+  if (response.status === 401 && accessToken) {
+    const renewed = !retried && tokenRefresher ? await tokenRefresher(accessToken) : null;
+    if (renewed) return performRequest<T>(path, options, renewed, raw, true);
+    unauthorizedListeners.forEach(listener => listener(accessToken));
+  }
   const content = await response.text();
   if (!content.trim() && response.ok && raw) return undefined;
   let body: unknown;
@@ -52,7 +64,7 @@ async function performRequest<T>(path: string, options: RequestInit, accessToken
     throw new Error('서버 응답을 읽을 수 없어요.');
   }
   const object = body !== null && typeof body === 'object' && !Array.isArray(body) ? body as Record<string, unknown> : null;
-  if (!response.ok) throw new ApiError(response.status, typeof object?.message === 'string' && object.message ? object.message : '요청을 처리하지 못했어요.');
+  if (!response.ok) throw new ApiError(response.status, typeof object?.message === 'string' && object.message ? object.message : '요청을 처리하지 못했어요.', typeof object?.code === 'string' ? object.code : undefined);
   if (raw) return body as T;
   if (object?.success !== true) throw new Error('서버 응답을 읽을 수 없어요.');
   return object.data as T | undefined;

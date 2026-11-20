@@ -15,11 +15,13 @@ const now = 1800000000000;
 function saved(claims) {
   return { accessToken: token(claims), refreshToken: 'refresh', user: { id: 42, name: '학생', role: 'STUDENT', profileImageUrl: '/uploads/photo.jpg' } };
 }
-test('stored session restores only an unexpired token for the same user and role', () => {
+test('stored session restores a token for the same user and role, even after the access token expired', () => {
   const valid = saved({ userId: 42, role: 'STUDENT', exp: now / 1000 + 60 });
   assert.deepEqual(parseStoredSession(JSON.stringify(valid), now), valid);
+  // The first 401 after restoring renews an expired access token with the refresh token.
+  const expired = saved({ userId: 42, role: 'STUDENT', exp: now / 1000 - 60 });
+  assert.deepEqual(parseStoredSession(JSON.stringify(expired), now), expired);
   for (const claims of [
-    { userId: 42, role: 'STUDENT', exp: now / 1000 },
     { userId: 43, role: 'STUDENT', exp: now / 1000 + 60 },
     { userId: 42, role: 'TEACHER', exp: now / 1000 + 60 },
     { userId: 42, role: 'STUDENT' },

@@ -2,6 +2,7 @@ import { router } from 'expo-router';
 import { useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { useSession } from '../auth/Session';
+import { authApi } from '../services/auth';
 import { ProfileAvatar } from './ProfileAvatar';
 
 export function ProfileMenu() {
@@ -17,7 +18,12 @@ export function ProfileMenu() {
       <Text style={styles.name} numberOfLines={1}>{name}</Text>
       <View style={styles.divider} />
       <Pressable accessibilityRole="button" style={styles.action} onPress={() => { setOpen(false); router.push('/profile'); }}><Text style={styles.actionText}>정보 수정</Text></Pressable>
-      <Pressable accessibilityRole="button" style={styles.action} onPress={() => { setOpen(false); setSession(null); setLocalUser(null); router.replace('/'); }}><Text style={styles.actionText}>로그아웃</Text></Pressable>
+      <Pressable accessibilityRole="button" style={styles.action} onPress={() => {
+        const leaving = session;
+        setOpen(false); setSession(null); setLocalUser(null); router.replace('/');
+        // Revoke the server-side session; the local sign-out must not depend on this call.
+        if (leaving) void authApi.logout(leaving.refreshToken).catch(() => {});
+      }}><Text style={styles.actionText}>로그아웃</Text></Pressable>
     </View>}
   </View>;
 }
