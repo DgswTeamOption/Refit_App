@@ -79,3 +79,23 @@ test('an already cancelled request never reaches the server', async () => {
     assert.equal(calls, 0);
   } finally { global.fetch = oldFetch; }
 });
+
+test('cancelling still returns promptly when token refresh is stalled', async () => {
+  const originalFetch = global.fetch;
+  let refreshStarted;
+  const started = new Promise(resolve => { refreshStarted = resolve; });
+  let finishRefresh;
+  const stop = http.setTokenRefresher(() => { refreshStarted(); return new Promise(resolve => { finishRefresh = resolve; }); });
+  global.fetch = async () => ({ ok: false, status: 401, text: async () => '{}' });
+  try {
+    const controller = new AbortController();
+    const pending = queryChatbot('이번달 현황', 'old-token', undefined, controller.signal);
+    await started;
+    controller.abort();
+    await assert.rejects(pending, error => error.name === 'AbortError');
+  } finally {
+    finishRefresh(null);
+    stop();
+    global.fetch = originalFetch;
+  }
+});

@@ -37,9 +37,15 @@ export async function queryChatbot(message: string, token: string, classId?: num
   const abort = () => controller.abort();
   if (signal?.aborted) abort();
   else signal?.addEventListener('abort', abort, { once: true });
+  let rejectAbort: () => void = () => {};
+  const cancelled = new Promise<never>((_, reject) => {
+    rejectAbort = () => { const error = new Error('요청이 취소됐어요.'); error.name = 'AbortError'; reject(error); };
+    if (controller.signal.aborted) rejectAbort();
+    else controller.signal.addEventListener('abort', rejectAbort, { once: true });
+  });
   const timer = setTimeout(() => { timedOut = true; controller.abort(); }, 20000);
   try {
-    const response = await request<unknown>('/api/chatbot/query', { method: 'POST', ...jsonBody({ message: text, ...(classId === undefined ? {} : { classId }) }), signal: controller.signal }, token);
+    const response = await Promise.race([request<unknown>('/api/chatbot/query', { method: 'POST', ...jsonBody({ message: text, ...(classId === undefined ? {} : { classId }) }), signal: controller.signal }, token), cancelled]);
     if (controller.signal.aborted) { const error = new Error('요청이 취소됐어요.'); error.name = 'AbortError'; throw error; }
     return validateChatbotResponse(response);
   } catch (error) {
@@ -47,6 +53,7 @@ export async function queryChatbot(message: string, token: string, classId?: num
     throw error;
   } finally {
     clearTimeout(timer);
+    controller.signal.removeEventListener('abort', rejectAbort);
     signal?.removeEventListener('abort', abort);
   }
 }
