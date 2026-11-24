@@ -64,9 +64,17 @@ async function performRequest<T>(path: string, options: RequestInit, accessToken
     throw new Error('서버 응답을 읽을 수 없어요.');
   }
   const object = body !== null && typeof body === 'object' && !Array.isArray(body) ? body as Record<string, unknown> : null;
-  if (!response.ok) throw new ApiError(response.status, typeof object?.message === 'string' && object.message ? object.message : '요청을 처리하지 못했어요.', typeof object?.code === 'string' ? object.code : undefined);
+  if (!response.ok) {
+    const reasons = Array.isArray(object?.errors) ? object.errors.map(item => item && typeof item === 'object' && typeof item.reason === 'string' ? item.reason : '').filter(Boolean) : [];
+    const nested = object?.error && typeof object.error === 'object' ? object.error as Record<string, unknown> : null;
+    const message = reasons.length ? reasons.join('\n') : typeof object?.message === 'string' && object.message ? object.message : typeof nested?.message === 'string' && nested.message ? nested.message : '요청을 처리하지 못했어요.';
+    throw new ApiError(response.status, message, typeof object?.code === 'string' ? object.code : typeof nested?.code === 'string' ? nested.code : undefined);
+  }
   if (raw) return body as T;
-  if (object?.success !== true) throw new Error('서버 응답을 읽을 수 없어요.');
+  if (object?.success !== true) {
+    const nested = object?.error && typeof object.error === 'object' ? object.error as Record<string, unknown> : null;
+    throw new Error(typeof nested?.message === 'string' && nested.message ? nested.message : '서버 응답을 읽을 수 없어요.');
+  }
   return object.data as T | undefined;
 }
 export function jsonBody(value: unknown): Pick<RequestInit, 'headers' | 'body'> {
