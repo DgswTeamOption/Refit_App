@@ -1,4 +1,4 @@
-import { jsonBody, request, withRequestTimeout } from './http';
+import { jsonBody, request } from './http';
 
 export type ChatbotStudent = { studentId: number; name: string; profileImageUrl: string | null; classId: number; className: string; absenceCount: number; makeupCount: number; lastAbsenceDate: string | null };
 export type UnproposedStudent = Omit<ChatbotStudent, 'makeupCount'>;
@@ -27,12 +27,28 @@ export function validateChatbotResponse(value: unknown): ChatbotResponse {
   throw new Error('챗봇 응답을 확인할 수 없어요.');
 }
 
-export async function queryChatbot(message: string, token: string, classId?: number): Promise<ChatbotResponse> {
+export async function queryChatbot(message: string, token: string, classId?: number, signal?: AbortSignal): Promise<ChatbotResponse> {
   const text = message.trim();
   if (!text || text.length > 200) throw new Error('질문은 1~200자로 입력해주세요.');
   if (classId !== undefined && (!Number.isSafeInteger(classId) || classId <= 0)) throw new Error('수업 정보를 확인할 수 없어요.');
-  const response = await withRequestTimeout(signal => request<unknown>('/api/chatbot/query', { method: 'POST', ...jsonBody({ message: text, ...(classId === undefined ? {} : { classId }) }), signal }, token), 20000, () => new Error('응답이 지연되고 있어요. 잠시 후 다시 시도해주세요.'));
-  return validateChatbotResponse(response);
+  if (signal?.aborted) { const error = new Error('요청이 취소됐어요.'); error.name = 'AbortError'; throw error; }
+  const controller = new AbortController();
+  let timedOut = false;
+  const abort = () => controller.abort();
+  if (signal?.aborted) abort();
+  else signal?.addEventListener('abort', abort, { once: true });
+  const timer = setTimeout(() => { timedOut = true; controller.abort(); }, 20000);
+  try {
+    const response = await request<unknown>('/api/chatbot/query', { method: 'POST', ...jsonBody({ message: text, ...(classId === undefined ? {} : { classId }) }), signal: controller.signal }, token);
+    if (controller.signal.aborted) { const error = new Error('요청이 취소됐어요.'); error.name = 'AbortError'; throw error; }
+    return validateChatbotResponse(response);
+  } catch (error) {
+    if (timedOut) throw new Error('응답이 지연되고 있어요. 잠시 후 다시 시도해주세요.');
+    throw error;
+  } finally {
+    clearTimeout(timer);
+    signal?.removeEventListener('abort', abort);
+  }
 }
 
 // Keep the standalone chatbot route compatible with the shared API client.

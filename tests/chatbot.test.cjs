@@ -49,3 +49,33 @@ test('chatbot errors retain nested server message and legacy endpoints stay avai
     assert.equal(typeof chatbotApi.monthlyStatus, 'function');
   } finally { global.fetch = oldFetch; }
 });
+
+test('cancelling a slow chatbot request aborts the network request', async () => {
+  const originalFetch = global.fetch;
+  let requestSignal;
+  global.fetch = async (_url, options) => {
+    requestSignal = options.signal;
+    return new Promise((resolve, reject) => {
+      options.signal.addEventListener('abort', () => { const error = new Error('cancelled'); error.name = 'AbortError'; reject(error); }, { once: true });
+    });
+  };
+  try {
+    const controller = new AbortController();
+    const pending = queryChatbot('이번달 현황', 'secret', undefined, controller.signal);
+    controller.abort();
+    await assert.rejects(pending, error => error.name === 'AbortError');
+    assert.equal(requestSignal.aborted, true);
+  } finally { global.fetch = originalFetch; }
+});
+
+test('an already cancelled request never reaches the server', async () => {
+  const oldFetch = global.fetch;
+  let calls = 0;
+  global.fetch = async () => { calls += 1; throw new Error('unexpected request'); };
+  try {
+    const controller = new AbortController();
+    controller.abort();
+    await assert.rejects(queryChatbot('현황', 'secret', undefined, controller.signal), error => error.name === 'AbortError');
+    assert.equal(calls, 0);
+  } finally { global.fetch = oldFetch; }
+});
