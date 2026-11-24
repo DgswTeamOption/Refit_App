@@ -1,42 +1,36 @@
-import { jsonBody, request } from './http';
+import { jsonBody, request, withRequestTimeout } from './http';
 
-export type ChatStudent = { studentId: number; name: string; profileImageUrl?: string | null; classId: number; className: string; absenceCount: number; makeupCount: number; lastAbsenceDate?: string | null };
-export type ChatUnproposedStudent = { studentId: number; name: string; profileImageUrl?: string | null; classId: number; className: string; absenceCount: number; lastAbsenceDate?: string | null };
-export type ChatRecommendTime = { rank: number; makeupTime: string; dayOfWeek: string; applicantCount: number };
-export type ChatMonthlyStatus = { year: number; month: number; absenceCount: number; makeupCount: number; pendingMakeupCount: number };
+export type ChatbotStudent = { studentId: number; name: string; profileImageUrl: string | null; classId: number; className: string; absenceCount: number; makeupCount: number; lastAbsenceDate: string | null };
+export type UnproposedStudent = Omit<ChatbotStudent, 'makeupCount'>;
+export type MonthlyStatus = { year: number; month: number; absenceCount: number; makeupCount: number; pendingMakeupCount: number };
+export type RecommendedTime = { rank: number; makeupTime: string; dayOfWeek: string; applicantCount: number };
+export type ChatbotResponse =
+  | { type: 'STUDENT'; message: string; data: ChatbotStudent[] }
+  | { type: 'UNPROPOSED_STUDENTS'; message: string; data: UnproposedStudent[] }
+  | { type: 'MONTHLY_STATUS'; message: string; data: MonthlyStatus }
+  | { type: 'RECOMMEND_TIME'; message: string; data: RecommendedTime[] }
+  | { type: 'GUIDE'; message: string; data?: null };
 
-export type ChatbotReply =
-  | { type: 'STUDENT'; message: string; data: ChatStudent[] }
-  | { type: 'RECOMMEND_TIME'; message: string; data: ChatRecommendTime[] }
-  | { type: 'UNPROPOSED_STUDENTS'; message: string; data: ChatUnproposedStudent[] }
-  | { type: 'MONTHLY_STATUS'; message: string; data: ChatMonthlyStatus }
-  | { type: 'GUIDE'; message: string; data: null };
-
-export const CHATBOT_MAX_LENGTH = 200;
-const listTypes = ['STUDENT', 'RECOMMEND_TIME', 'UNPROPOSED_STUDENTS'];
-
-export function validateChatbotReply(value: unknown): ChatbotReply {
-  const reply = value as { type?: unknown; message?: unknown; data?: unknown } | null | undefined;
-  const type = reply?.type;
-  const ok = !!reply && typeof reply.message === 'string' && (
-    (typeof type === 'string' && listTypes.includes(type) && Array.isArray(reply.data))
-    || (type === 'MONTHLY_STATUS' && !!reply.data && typeof reply.data === 'object')
-    || type === 'GUIDE');
-  if (!ok) throw new Error('챗봇 응답을 확인할 수 없어요.');
-  return (type === 'GUIDE' ? { ...reply, data: null } : reply) as ChatbotReply;
+export function validateChatbotResponse(value: unknown): ChatbotResponse {
+  if (!value || typeof value !== 'object') throw new Error('챗봇 응답을 확인할 수 없어요.');
+  const response = value as Record<string, unknown>;
+  if (typeof response.message !== 'string') throw new Error('챗봇 응답을 확인할 수 없어요.');
+  const isRecord = (item: unknown): item is Record<string, unknown> => !!item && typeof item === 'object' && !Array.isArray(item);
+  const isCount = (item: unknown) => typeof item === 'number' && Number.isFinite(item) && item >= 0;
+  const isStudent = (item: unknown) => isRecord(item) && Number.isSafeInteger(item.studentId) && Number.isSafeInteger(item.classId) && typeof item.name === 'string' && typeof item.className === 'string' && isCount(item.absenceCount) && (item.lastAbsenceDate == null || typeof item.lastAbsenceDate === 'string');
+  const data = response.data;
+  if (response.type === 'GUIDE' && data == null) return response as ChatbotResponse;
+  if (response.type === 'STUDENT' && Array.isArray(data) && data.every(item => isStudent(item) && isCount(item.makeupCount))) return response as ChatbotResponse;
+  if (response.type === 'UNPROPOSED_STUDENTS' && Array.isArray(data) && data.every(isStudent)) return response as ChatbotResponse;
+  if (response.type === 'MONTHLY_STATUS' && isRecord(data) && Number.isInteger(data.year) && Number.isInteger(data.month) && isCount(data.absenceCount) && isCount(data.makeupCount) && isCount(data.pendingMakeupCount)) return response as ChatbotResponse;
+  if (response.type === 'RECOMMEND_TIME' && Array.isArray(data) && data.every(item => isRecord(item) && Number.isInteger(item.rank) && typeof item.makeupTime === 'string' && typeof item.dayOfWeek === 'string' && isCount(item.applicantCount))) return response as ChatbotResponse;
+  throw new Error('챗봇 응답을 확인할 수 없어요.');
 }
 
-async function required<T>(promise: Promise<T | undefined>): Promise<T> {
-  const result = await promise;
-  if (result === undefined || result === null) throw new Error('챗봇 응답을 확인할 수 없어요.');
-  return result;
+export async function queryChatbot(message: string, token: string, classId?: number): Promise<ChatbotResponse> {
+  const text = message.trim();
+  if (!text || text.length > 200) throw new Error('질문은 1~200자로 입력해주세요.');
+  if (classId !== undefined && (!Number.isSafeInteger(classId) || classId <= 0)) throw new Error('수업 정보를 확인할 수 없어요.');
+  const response = await withRequestTimeout(signal => request<unknown>('/api/chatbot/query', { method: 'POST', ...jsonBody({ message: text, ...(classId === undefined ? {} : { classId }) }), signal }, token), 20000, () => new Error('응답이 지연되고 있어요. 잠시 후 다시 시도해주세요.'));
+  return validateChatbotResponse(response);
 }
-
-export const chatbotApi = {
-  query: async (message: string, token: string, classId?: number) =>
-    validateChatbotReply(await request<unknown>('/api/chatbot/query', { method: 'POST', ...jsonBody({ message, classId: classId ?? null }) }, token)),
-  students: (name: string, token: string) => required(request<ChatStudent[]>(`/api/chatbot/students?name=${encodeURIComponent(name)}`, {}, token)),
-  monthlyStatus: (token: string) => required(request<ChatMonthlyStatus>('/api/chatbot/monthly-status', {}, token)),
-  unproposedStudents: (token: string) => required(request<ChatUnproposedStudent[]>('/api/chatbot/unproposed-students', {}, token)),
-  recommendTime: (classId: number, token: string) => required(request<ChatRecommendTime[]>(`/api/chatbot/recommend-time?classId=${classId}`, {}, token)),
-};
