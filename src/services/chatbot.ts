@@ -34,3 +34,39 @@ export async function queryChatbot(message: string, token: string, classId?: num
   const response = await withRequestTimeout(signal => request<unknown>('/api/chatbot/query', { method: 'POST', ...jsonBody({ message: text, ...(classId === undefined ? {} : { classId }) }), signal }, token), 20000, () => new Error('응답이 지연되고 있어요. 잠시 후 다시 시도해주세요.'));
   return validateChatbotResponse(response);
 }
+
+// Keep the standalone chatbot route compatible with the shared API client.
+export const CHATBOT_MAX_LENGTH = 200;
+export type ChatbotReply = ChatbotResponse;
+export type ChatStudent = ChatbotStudent;
+export type ChatUnproposedStudent = UnproposedStudent;
+export type ChatRecommendTime = RecommendedTime;
+export type ChatMonthlyStatus = MonthlyStatus;
+export const validateChatbotReply = validateChatbotResponse;
+export const chatbotApi = {
+  query: queryChatbot,
+  async students(name: string, token: string): Promise<ChatbotStudent[]> {
+    const data = await request<unknown>(`/api/chatbot/students?name=${encodeURIComponent(name)}`, {}, token);
+    const reply = validateChatbotResponse({ type: 'STUDENT', message: '', data });
+    if (reply.type !== 'STUDENT') throw new Error('챗봇 응답을 확인할 수 없어요.');
+    return reply.data;
+  },
+  async monthlyStatus(token: string): Promise<MonthlyStatus> {
+    const data = await request<unknown>('/api/chatbot/monthly-status', {}, token);
+    const reply = validateChatbotResponse({ type: 'MONTHLY_STATUS', message: '', data });
+    if (reply.type !== 'MONTHLY_STATUS') throw new Error('챗봇 응답을 확인할 수 없어요.');
+    return reply.data;
+  },
+  async unproposedStudents(token: string): Promise<UnproposedStudent[]> {
+    const data = await request<unknown>('/api/chatbot/unproposed-students', {}, token);
+    const reply = validateChatbotResponse({ type: 'UNPROPOSED_STUDENTS', message: '', data });
+    if (reply.type !== 'UNPROPOSED_STUDENTS') throw new Error('챗봇 응답을 확인할 수 없어요.');
+    return reply.data;
+  },
+  async recommendTime(classId: number, token: string): Promise<RecommendedTime[]> {
+    const data = await request<unknown>(`/api/chatbot/recommend-time?classId=${encodeURIComponent(classId)}`, {}, token);
+    const reply = validateChatbotResponse({ type: 'RECOMMEND_TIME', message: '', data });
+    if (reply.type !== 'RECOMMEND_TIME') throw new Error('챗봇 응답을 확인할 수 없어요.');
+    return reply.data;
+  },
+};

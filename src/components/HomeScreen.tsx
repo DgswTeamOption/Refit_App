@@ -8,6 +8,7 @@ import { Calendar, type CalendarMarks, type ClassCalendarColor } from './Calenda
 import { NotificationBell, type NotificationActions, type NotificationItem } from './NotificationBell';
 import { ClassCards, type ClassSummary } from './ClassCards';
 import { ProfileMenu } from './ProfileMenu';
+import { RefitChatbot } from './RefitChatbot';
 import { Alert, Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
@@ -79,6 +80,7 @@ export function HomeScreen({ role, classes = [], notifications, notificationActi
       {!!listError && <View style={styles.listError}><Text style={styles.listErrorText}>{listError}</Text><Pressable accessibilityRole="button" onPress={onRetry}><Text style={styles.listRetry}>다시 시도</Text></Pressable></View>}
       {listStatus ? <View style={styles.empty}><Text style={styles.emptyText}>{listStatus}</Text>{onRetry && <Pressable accessibilityRole="button" accessibilityLabel="수업 목록 다시 불러오기" onPress={onRetry} style={styles.emptyButton}><Image source={require('../../assets/figma/home-button.svg')} style={StyleSheet.absoluteFill} contentFit="fill" /><Text style={styles.buttonText}>다시 시도</Text></Pressable>}</View> : classes.length ? <ClassCards classes={classes} role={role} onRemove={onRemoveClass} onBanner={onBanner} /> : <View style={styles.empty}><Text style={styles.emptyText}>아직 참여한 수업이 없어요</Text><Pressable accessibilityRole="button" onPress={showModal} style={styles.emptyButton}><Image source={require('../../assets/figma/home-button.svg')} style={StyleSheet.absoluteFill} contentFit="fill" /><Text style={styles.buttonText}>{action}</Text></Pressable></View>}
     </ScrollView>
+    {teacher && session?.user.role === 'TEACHER' && <RefitChatbot key={session.user.id} token={session.accessToken} classes={classes} />}
     <Modal transparent visible={modalVisible} animationType="fade" onRequestClose={() => { if (!submitting.current) setModalVisible(false); }}><View style={styles.overlay}><View style={styles.modal}>
       <Text style={styles.modalTitle}>{action}</Text>
       {teacher ? <><Text style={styles.label}>수업 제목 *</Text><TextInput editable={!busy} accessibilityLabel="수업 제목" value={value} onChangeText={setValue} placeholder="수업 제목을 입력해주세요" placeholderTextColor="#aaa" style={styles.input} /><Text style={styles.label}>배너 사진</Text><Pressable disabled={busy} accessibilityLabel="배너 사진 선택" style={styles.photo} onPress={selectBanner}>{banner ? <Image source={{ uri: banner.uri }} style={StyleSheet.absoluteFill} contentFit="cover" /> : <Text style={styles.photoText}>사진 선택</Text>}</Pressable></> : <><Text style={styles.modalDescription}>수업코드를 입력해주세요.</Text><TextInput editable={!busy} accessibilityLabel="수업 코드" autoCapitalize="characters" value={value} onChangeText={setValue} placeholder="수업코드를 입력해주세요" placeholderTextColor="#aaa" style={styles.input} /></>}
