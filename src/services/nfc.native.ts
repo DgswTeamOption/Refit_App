@@ -1,8 +1,11 @@
-import NfcManager, { Ndef, NfcTech } from 'react-native-nfc-manager';
-
 export async function readAttendanceToken(): Promise<string> {
   let requested = false;
+  let NfcManager: typeof import('react-native-nfc-manager').default | undefined;
   try {
+    const nfc = await import('react-native-nfc-manager').catch(() => null);
+    if (!nfc) throw new Error('NFC는 개발 빌드에서만 사용할 수 있어요. (Expo Go 미지원)');
+    const { Ndef, NfcTech } = nfc;
+    NfcManager = nfc.default;
     await NfcManager.start();
     if (!await NfcManager.isSupported()) throw new Error('이 기기는 NFC를 지원하지 않아요.');
     requested = true;
@@ -16,5 +19,5 @@ export async function readAttendanceToken(): Promise<string> {
       if (value && value.length <= 64) return value;
     }
     throw new Error('태그에서 출석 토큰을 읽지 못했어요.');
-  } finally { if (requested) await NfcManager.cancelTechnologyRequest().catch(() => {}); }
+  } finally { if (requested) await NfcManager?.cancelTechnologyRequest().catch(() => {}); }
 }
