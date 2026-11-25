@@ -8,27 +8,33 @@ export async function checkNfcWriteSupport(): Promise<void> {
   if (Platform.OS === 'android' && !await nfc.default.isEnabled()) throw new Error('휴대폰 설정에서 NFC를 켜주세요.');
 }
 
-export async function cancelNfcWrite(): Promise<void> {
-  const nfc = await import('react-native-nfc-manager').catch(() => null);
-  await nfc?.default.cancelTechnologyRequest().catch(() => {});
-}
-
-export async function writeAttendanceUrl(url: string): Promise<void> {
+export async function writeAttendanceUrl(url: string, signal?: AbortSignal): Promise<void> {
   const parsed = new URL(url);
   if ((parsed.protocol !== 'https:' && parsed.protocol !== 'http:') || !parsed.searchParams.get('token')) throw new Error('출석 주소를 확인할 수 없어요.');
+  const checkCancelled = () => { if (signal?.aborted) throw new Error('태그 인식을 취소했어요.'); };
+  checkCancelled();
   await checkNfcWriteSupport();
   const { default: manager, Ndef, NdefStatus, NfcTech } = await import('react-native-nfc-manager');
+  checkCancelled();
   const bytes = Ndef.encodeMessage([Ndef.uriRecord(url)]);
   let requested = false;
+  const cancel = () => { if (requested) void manager.cancelTechnologyRequest().catch(() => {}); };
+  signal?.addEventListener('abort', cancel, { once: true });
   try {
+    checkCancelled();
     requested = true;
     await manager.requestTechnology(NfcTech.Ndef, { alertMessage: '등록할 NFC 태그에 아이폰 윗부분을 가까이 대주세요.' });
+    checkCancelled();
     const status = await manager.ndefHandler.getNdefStatus();
+    checkCancelled();
     if (status.status !== NdefStatus.ReadWrite) throw new Error('쓰기 가능한 NFC 태그가 아니에요.');
     if (status.capacity < bytes.length) throw new Error('태그의 저장 공간이 부족해요.');
     await manager.ndefHandler.writeNdefMessage(bytes);
     if (Platform.OS === 'ios') await manager.setAlertMessageIOS('태그에 출석 주소를 기록했어요.').catch(() => {});
-  } finally { if (requested) await manager.cancelTechnologyRequest().catch(() => {}); }
+  } catch (error) {
+    if (signal?.aborted) throw new Error('태그 인식을 취소했어요. 다시 시도할 수 있어요.');
+    throw error;
+  } finally { signal?.removeEventListener('abort', cancel); if (requested) await manager.cancelTechnologyRequest().catch(() => {}); }
 }
 
 export async function readAttendanceToken(): Promise<string> {
