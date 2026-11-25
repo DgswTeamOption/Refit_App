@@ -1,45 +1,129 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useRef, useState } from 'react';
 import { useFocusEffect } from 'expo-router';
-import { Alert, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Alert, Platform, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { useSession } from '../auth/Session';
-import { jsonBody, request } from '../services/http';
+import { ApiError, jsonBody, request, withRequestTimeout } from '../services/http';
+import { cancelNfcWrite, checkNfcWriteSupport, writeAttendanceUrl } from '../services/nfc';
+import { checkNfcRegistrationStorage, clearPendingNfcRegistration, loadPendingNfcRegistration, parsePendingNfcRegistration, savePendingNfcRegistration, type PendingNfcRegistration } from '../services/nfcRegistration';
 
-// token and url are only returned when a tag is created; list responses omit them.
 type Tag = { id: number; name: string; class_id: number | null; is_active: boolean; token?: string; url?: string };
+
 export function NfcTags({ classId }: { classId: number }) {
   const { session } = useSession();
   const [tags, setTags] = useState<Tag[]>([]);
   const [name, setName] = useState('');
-  const [issued, setIssued] = useState<Tag | null>(null);
+  const [pending, setPending] = useState<PendingNfcRegistration | null>(null);
+  const [storageReady, setStorageReady] = useState(Platform.OS === 'web');
   const [busy, setBusy] = useState(false);
+  const [scanning, setScanning] = useState(false);
   const [error, setError] = useState('');
+  const [pendingError, setPendingError] = useState('');
+  const working = useRef(false);
+  const userId = session?.user.id;
+  const token = session?.accessToken;
+
   const load = useCallback(async () => {
-    if (!session) return;
-    try { const data = await request<Tag[]>('/api/class/nfc/tags', {}, session.accessToken); if (!Array.isArray(data)) throw new Error('태그 목록을 확인할 수 없어요.'); setTags(data); setError(''); }
+    if (!token) return;
+    try { const data = await withRequestTimeout(signal => request<Tag[]>('/api/class/nfc/tags', { signal }, token), 20000, () => new Error('태그 목록 조회가 지연되고 있어요.')); if (!Array.isArray(data)) throw new Error('태그 목록을 확인할 수 없어요.'); setTags(data); setError(''); }
     catch (e) { setError(e instanceof Error ? e.message : '태그 목록을 불러오지 못했어요.'); }
-  }, [session]);
+  }, [token]);
   useFocusEffect(useCallback(() => { void load(); }, [load]));
+  useFocusEffect(useCallback(() => {
+    if (!userId || Platform.OS === 'web') return;
+    let active = true;
+    setStorageReady(false);
+    loadPendingNfcRegistration(userId, classId).then(value => { if (active) { setPending(value); setPendingError(''); setStorageReady(true); } })
+      .catch(e => { if (active) { setPendingError(e instanceof Error ? e.message : '태그 등록 정보를 불러오지 못했어요.'); setStorageReady(false); } });
+    return () => { active = false; };
+  }, [userId, classId]));
+
   async function run(path: string, method: string, body?: object) {
-    if (!session || busy) return;
-    setBusy(true);
-    try { await request(path, { method, ...(body ? jsonBody(body) : {}) }, session.accessToken); setName(''); await load(); }
+    if (!token || working.current) return;
+    working.current = true; setBusy(true);
+    try { await request(path, { method, ...(body ? jsonBody(body) : {}) }, token); await load(); }
     catch (e) { Alert.alert('처리 실패', e instanceof Error ? e.message : '다시 시도해주세요.'); }
-    finally { setBusy(false); }
+    finally { working.current = false; setBusy(false); }
   }
+
+  async function linkedTag(): Promise<Tag | undefined> {
+    try { return await withRequestTimeout(signal => request<Tag>(`/api/class/nfc/${classId}`, { signal }, token), 20000, () => new Error('수업의 태그 연결 상태를 확인하지 못했어요. 다시 시도해주세요.')); }
+    catch (e) { if (e instanceof ApiError && e.status === 404) return undefined; throw e; }
+  }
+
+  async function finishRegistration(item: PendingNfcRegistration) {
+    if (!userId || !token) return;
+    // Persist the one-time URL before attempting to write, including after storage errors.
+    await savePendingNfcRegistration(userId, classId, item);
+    const before = await linkedTag();
+    if (before && before.id !== item.id) throw new Error('이 수업에 이미 다른 태그가 연결되어 있어요. 기존 태그의 연결을 해제한 뒤 다시 시도해주세요.');
+    if (!item.written) {
+      setScanning(true);
+      try { await writeAttendanceUrl(item.url); }
+      finally { setScanning(false); }
+      item = { ...item, written: true };
+      setPending(item);
+      await savePendingNfcRegistration(userId, classId, item);
+    }
+    const linked = await linkedTag();
+    if (linked && linked.id !== item.id) throw new Error('이 수업에 이미 다른 태그가 연결되어 있어요. 기존 태그의 연결을 해제한 뒤 다시 시도해주세요.');
+    if (!linked) {
+      try { await withRequestTimeout(signal => request(`/api/class/nfc/${classId}`, { method: 'POST', ...jsonBody({ tag_id: item.id }), signal }, token), 20000, () => new Error('수업 연결 결과를 확인하지 못했어요. 다시 시도해주세요.')); }
+      catch (e) {
+        // A connection can succeed on the server even when its response is lost.
+        const after = await linkedTag().catch(() => undefined);
+        if (after?.id !== item.id) throw e;
+      }
+    }
+    await clearPendingNfcRegistration(userId, classId);
+    setPending(null); setPendingError('');
+    await load();
+    Alert.alert('태그 등록 완료', '태그에 출석 주소를 기록하고 이 수업에 연결했어요.');
+  }
+
   async function create() {
     const tagName = name.trim();
     if (!tagName) return Alert.alert('태그 이름을 입력해주세요.');
-    if (!session || busy) return;
-    setBusy(true);
+    if (!userId || !token || working.current || !storageReady || pending) return;
+    working.current = true; setBusy(true); setPendingError('');
     try {
-      const created = await request<Tag>('/api/class/nfc/tags', { method: 'POST', ...jsonBody({ name: tagName }) }, session.accessToken);
-      if (!created || (!created.token && !created.url)) throw new Error('태그 정보를 확인할 수 없어요. 태그 목록을 확인해주세요.');
-      setIssued(created); setName('');
-      await load();
-    } catch (e) { Alert.alert('처리 실패', e instanceof Error ? e.message : '다시 시도해주세요.'); }
-    finally { setBusy(false); }
+      await checkNfcWriteSupport();
+      await checkNfcRegistrationStorage();
+      if (await linkedTag()) throw new Error('이 수업에 이미 연결된 태그가 있어요. 먼저 연결을 해제해주세요.');
+      const created = await withRequestTimeout(signal => request<Tag>('/api/class/nfc/tags', { method: 'POST', ...jsonBody({ name: tagName }), signal }, token), 20000, () => new Error('태그 생성 결과를 확인하지 못했어요. 태그 목록을 확인한 뒤 다시 시도해주세요.'));
+      if (!created || !Number.isSafeInteger(created.id) || created.id <= 0 || !created.url) throw new Error('태그 생성 결과를 확인할 수 없어요. 태그 목록을 확인해주세요.');
+      const item: PendingNfcRegistration = { id: created.id, name: created.name || tagName, url: created.url, written: false };
+      parsePendingNfcRegistration(JSON.stringify(item));
+      setPending(item); setName('');
+      await finishRegistration(item);
+    } catch (e) { setPendingError(e instanceof Error ? e.message : '태그 등록에 실패했어요.'); await load(); }
+    finally { working.current = false; setBusy(false); }
   }
-  const button = (label: string, action: () => void) => <Pressable disabled={busy} onPress={action} style={styles.button}><Text style={styles.buttonText}>{label}</Text></Pressable>;
-  return <View style={styles.container}><Text style={styles.title}>NFC 태그 관리</Text><Text style={styles.description}>태그를 생성하고 수업에 연결하세요. 토큰과 URL은 생성한 직후에만 볼 수 있어요. 별도의 NFC 쓰기 도구로 태그에 기록해주세요.</Text>{!!error && <Text onPress={() => void load()} style={styles.error}>{error} · 다시 시도</Text>}<TextInput value={name} onChangeText={setName} maxLength={50} placeholder="새 태그 이름" style={styles.input} />{button('태그 생성', () => void create())}{issued && <View style={styles.card}><Text style={styles.title}>{issued.name} 생성됨</Text><Text selectable style={styles.description}>토큰: {issued.token ?? '-'}{'\n'}URL: {issued.url ?? '-'}</Text><Text style={styles.warning}>이 값은 지금만 볼 수 있어요. 태그에 기록하기 전에 복사해 두세요.</Text>{button('닫기', () => setIssued(null))}</View>}{tags.map(tag => <View style={styles.card} key={tag.id}><Text style={styles.title}>{tag.name} · {tag.is_active ? '사용 중' : '비활성'}</Text><Text style={styles.description}>{tag.class_id ? `연결된 수업 #${tag.class_id}` : '연결된 수업 없음'}</Text>{tag.class_id === classId ? button('연결 해제', () => void run(`/api/class/nfc/${classId}`, 'DELETE')) : !tag.class_id ? button('이 수업에 연결', () => void run(`/api/class/nfc/${classId}`, 'POST', { tag_id: tag.id })) : null}{button(tag.is_active ? '비활성화' : '활성화', () => void run(`/api/class/nfc/tags/${tag.id}`, 'PATCH', { is_active: !tag.is_active }))}{!tag.class_id && button('태그 삭제', () => Alert.alert('태그를 삭제할까요?', '', [{ text: '취소' }, { text: '삭제', style: 'destructive', onPress: () => void run(`/api/class/nfc/tags/${tag.id}`, 'DELETE') }]))}</View>)}</View>;
+
+  async function resume() {
+    if (!pending || working.current) return;
+    working.current = true; setBusy(true); setPendingError('');
+    try { await finishRegistration(pending); }
+    catch (e) { setPendingError(e instanceof Error ? e.message : '태그 등록에 실패했어요.'); await load(); }
+    finally { working.current = false; setBusy(false); }
+  }
+
+  return <View style={styles.container}>
+    <Text style={styles.title}>NFC 태그 관리</Text>
+    <Text style={styles.description}>이름을 입력하고 등록을 누른 뒤 휴대폰을 NFC 태그에 대주세요. 태그에 출석 주소를 기록하고 이 수업에 연결해요. 태그의 기존 내용은 덮어써집니다.</Text>
+    <Text style={styles.description}>기존 태그를 수업에 다시 연결하려면 해당 태그에 출석 주소가 이미 기록되어 있어야 해요.</Text>
+    {!!error && <Text onPress={() => void load()} style={styles.error}>{error} · 다시 시도</Text>}
+    {!!pendingError && <Text accessibilityRole="alert" style={styles.error}>{pendingError}</Text>}
+    {pending ? <View style={styles.card}>
+      <Text style={styles.title}>{pending.name} 등록 중</Text>
+      <Text style={styles.description}>{pending.written ? '태그 기록이 끝났어요. 수업 연결을 완료해주세요.' : '태그에 기록할 차례예요. NFC 태그를 가까이 대주세요.'}</Text>
+      <Text style={styles.warning}>등록이 끝날 때까지 이 태그를 보관해주세요. 실패하면 이어서 시도할 수 있어요.</Text>
+      <ActionButton busy={busy} label={pending.written ? '수업 연결 다시 시도' : '태그 기록 다시 시도'} onPress={() => void resume()} />
+      {scanning && <Pressable accessibilityRole="button" onPress={() => void cancelNfcWrite()} style={styles.cancel}><Text>태그 인식 취소</Text></Pressable>}
+    </View> : <><TextInput value={name} onChangeText={setName} maxLength={50} placeholder="새 태그 이름" accessibilityLabel="새 태그 이름" style={styles.input} /><ActionButton busy={busy} disabled={!storageReady} label={busy ? '등록 중...' : 'NFC 태그 등록'} onPress={() => void create()} /></>}
+    {tags.map(tag => <View style={styles.card} key={tag.id}><Text style={styles.title}>{tag.name} · {tag.is_active ? '사용 중' : '비활성'}</Text><Text style={styles.description}>{tag.class_id ? `연결된 수업 #${tag.class_id}` : '연결된 수업 없음'}</Text>{tag.id === pending?.id ? <Text style={styles.warning}>위에서 태그 등록을 완료해주세요.</Text> : <>{tag.class_id === classId ? <ActionButton busy={busy} label="연결 해제" onPress={() => void run(`/api/class/nfc/${classId}`, 'DELETE')} /> : !tag.class_id ? <ActionButton busy={busy} label="이 수업에 연결" onPress={() => void run(`/api/class/nfc/${classId}`, 'POST', { tag_id: tag.id })} /> : null}<ActionButton busy={busy} label={tag.is_active ? '비활성화' : '활성화'} onPress={() => void run(`/api/class/nfc/tags/${tag.id}`, 'PATCH', { is_active: !tag.is_active })} />{!tag.class_id && <ActionButton busy={busy} label="태그 삭제" onPress={() => Alert.alert('태그를 삭제할까요?', '', [{ text: '취소' }, { text: '삭제', style: 'destructive', onPress: () => void run(`/api/class/nfc/tags/${tag.id}`, 'DELETE') }])} />}</>}</View>)}
+  </View>;
 }
-const styles = StyleSheet.create({ container: { padding: 20 }, title: { fontSize: 15, fontWeight: '700', marginBottom: 8 }, description: { color: '#666', fontSize: 12, marginBottom: 10 }, error: { color: '#d33', marginVertical: 8 }, warning: { color: '#d33', fontSize: 12, marginBottom: 10 }, input: { borderWidth: 1, borderColor: '#ddd', borderRadius: 8, padding: 10, marginVertical: 8 }, card: { padding: 14, marginTop: 12, borderWidth: 1, borderColor: '#ddd', borderRadius: 8 }, button: { backgroundColor: '#0099ff', borderRadius: 8, padding: 10, alignItems: 'center', marginVertical: 3 }, buttonText: { color: '#fff', fontWeight: '700' } });
+function ActionButton({ label, onPress, busy, disabled = false }: { label: string; onPress: () => void; busy: boolean; disabled?: boolean }) {
+  return <Pressable accessibilityRole="button" disabled={busy || disabled} onPress={onPress} style={[styles.button, (busy || disabled) && styles.disabled]}><Text style={styles.buttonText}>{label}</Text></Pressable>;
+}
+const styles = StyleSheet.create({ container: { padding: 20 }, title: { fontSize: 15, fontWeight: '700', marginBottom: 8 }, description: { color: '#666', fontSize: 12, marginBottom: 10 }, error: { color: '#d33', marginVertical: 8 }, warning: { color: '#d33', fontSize: 12, marginBottom: 10 }, input: { borderWidth: 1, borderColor: '#ddd', borderRadius: 8, padding: 10, marginVertical: 8 }, card: { padding: 14, marginTop: 12, borderWidth: 1, borderColor: '#ddd', borderRadius: 8 }, button: { backgroundColor: '#0099ff', borderRadius: 8, padding: 10, alignItems: 'center', marginVertical: 3 }, cancel: { padding: 12, alignItems: 'center' }, disabled: { opacity: 0.5 }, buttonText: { color: '#fff', fontWeight: '700' } });
