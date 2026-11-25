@@ -1,7 +1,7 @@
 import { Image } from 'expo-image';
 import { memo, useCallback, useEffect, useRef, useState, type ComponentRef } from 'react';
 import { ActivityIndicator, KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View, type ScrollViewInstance } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { queryChatbot, type ChatbotResponse } from '../services/chatbot';
 import type { ClassSummary } from './ClassCards';
 
@@ -15,6 +15,7 @@ const suggestions = [
 ];
 
 export function RefitChatbot({ token, classes, initialOpen = false, onClose, classListStatus, onRetryClasses }: { token: string; classes: ClassSummary[]; initialOpen?: boolean; onClose?: () => void; classListStatus?: string; onRetryClasses?: () => void }) {
+  const insets = useSafeAreaInsets();
   const [open, setOpen] = useState(initialOpen);
   const [input, setInput] = useState('');
   const [items, setItems] = useState<Conversation[]>([]);
@@ -65,7 +66,7 @@ export function RefitChatbot({ token, classes, initialOpen = false, onClose, cla
   const close = () => { setClassChooser(false); setOpen(false); onClose?.(); };
   const openClassChooser = useCallback(() => setClassChooser(true), []);
   return <>
-    {!onClose && <Pressable accessibilityRole="button" accessibilityLabel="Refit AI 열기" onPress={() => setOpen(true)} style={styles.launcher}><Image source={require('../../assets/figma/chatbot/launcher.svg')} style={styles.launcherImage} contentFit="contain" /></Pressable>}
+    {!onClose && <Pressable accessibilityRole="button" accessibilityLabel="Refit AI 열기" onPress={() => setOpen(true)} style={[styles.launcher, { bottom: Math.max(insets.bottom, 12) + 20 }]}><Image source={require('../../assets/figma/chatbot/launcher.svg')} style={styles.launcherImage} contentFit="contain" /></Pressable>}
     <Modal visible={open} transparent animationType="fade" onRequestClose={close}>
       <SafeAreaView style={styles.overlay} edges={['top', 'bottom']}>
         <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={styles.keyboard}>
@@ -110,7 +111,7 @@ function Answer({ answer, ask, busy }: { answer: ChatbotResponse; ask: (question
 }
 function Stat({ label, value }: { label: string; value: string }) { return <View style={styles.stat}><Text style={styles.statValue} numberOfLines={1} adjustsFontSizeToFit>{value}</Text><Text style={styles.muted}>{label}</Text></View>; }
 const styles = StyleSheet.create({
-  launcher: { position: 'absolute', right: 16, bottom: 20, zIndex: 20, borderRadius: 16, elevation: 6, shadowColor: '#000', shadowOpacity: 0.18, shadowRadius: 10, shadowOffset: { width: 0, height: 4 } }, launcherImage: { width: 56, height: 56 },
+  launcher: { position: 'absolute', right: 16, zIndex: 20, borderRadius: 16, elevation: 6, shadowColor: '#000', shadowOpacity: 0.18, shadowRadius: 10, shadowOffset: { width: 0, height: 4 } }, launcherImage: { width: 56, height: 56 },
   overlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.16)', alignItems: 'center', justifyContent: 'center' }, keyboard: { width: '100%', flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 12, paddingVertical: 16 }, panel: { width: '100%', maxWidth: 440, flex: 1, maxHeight: 742, backgroundColor: '#fff', borderRadius: 24, borderWidth: 1, borderColor: '#e9e9e9', overflow: 'hidden', elevation: 10, shadowColor: '#000', shadowOpacity: 0.1, shadowRadius: 20, shadowOffset: { width: 0, height: 10 } },
   header: { minHeight: 85, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 23, borderBottomWidth: 1, borderBottomColor: '#eee' }, logo: { width: 40, height: 40 }, headerText: { flex: 1, marginLeft: 12 }, heading: { color: '#151515', fontSize: 17, fontWeight: '700' }, subtitle: { color: '#888', fontSize: 11, marginTop: 4 }, minimize: { width: 38, height: 38 },
   content: { paddingHorizontal: 23, paddingTop: 18, paddingBottom: 16, flexGrow: 1 }, greeting: { fontSize: 21, fontWeight: '700', color: '#151515' }, intro: { color: '#777', fontSize: 14, lineHeight: 22, marginTop: 8 }, introCard: { backgroundColor: '#eff8ff', borderRadius: 16, padding: 16, marginTop: 14 }, introTitle: { color: '#008be0', fontSize: 15, fontWeight: '700' }, introCopy: { color: '#63788a', fontSize: 12, lineHeight: 20, marginTop: 7 }, prompt: { color: '#888', fontSize: 13, marginTop: 16, marginBottom: 8 }, suggestion: { minHeight: 46, borderWidth: 1, borderColor: '#e9e9e9', borderRadius: 12, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 11, marginBottom: 8 }, number: { width: 28, height: 28, borderRadius: 9, backgroundColor: '#f3f8fc', alignItems: 'center', justifyContent: 'center' }, numberText: { color: '#009fff', fontSize: 11, fontWeight: '600' }, suggestionText: { flex: 1, color: '#333', fontSize: 12, marginLeft: 12 }, chevron: { width: 6.6, height: 11.6 },
