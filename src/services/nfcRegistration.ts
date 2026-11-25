@@ -42,3 +42,35 @@ export async function clearPendingNfcRegistration(userId: number, classId: numbe
   const store = await secureStore();
   await store.deleteItemAsync(keyFor(userId, classId));
 }
+
+type RegistrationOperations = {
+  save: (item: PendingNfcRegistration) => Promise<void>;
+  write: (url: string) => Promise<void>;
+  linkedId: () => Promise<number | undefined>;
+  link: (id: number) => Promise<void>;
+  clear: () => Promise<void>;
+  onWritten: (item: PendingNfcRegistration) => void;
+};
+
+export async function completeNfcRegistration(item: PendingNfcRegistration, operations: RegistrationOperations): Promise<void> {
+  await operations.save(item);
+  const existing = await operations.linkedId();
+  if (existing !== undefined && existing !== item.id) throw new Error('이 수업에 이미 다른 태그가 연결되어 있어요. 기존 태그의 연결을 해제한 뒤 다시 시도해주세요.');
+  if (!item.written) {
+    await operations.write(item.url);
+    item = { ...item, written: true };
+    operations.onWritten(item);
+    await operations.save(item);
+  }
+  const linked = await operations.linkedId();
+  if (linked !== undefined && linked !== item.id) throw new Error('이 수업에 이미 다른 태그가 연결되어 있어요. 기존 태그의 연결을 해제한 뒤 다시 시도해주세요.');
+  if (linked === undefined) {
+    try { await operations.link(item.id); }
+    catch (error) {
+      // The link may have succeeded even if the response was lost.
+      const after = await operations.linkedId().catch(() => undefined);
+      if (after !== item.id) throw error;
+    }
+  }
+  await operations.clear();
+}
