@@ -12,26 +12,52 @@ function load(file, overrides) {
   return mod.exports;
 }
 
-function nativeFixture(status = { status: 2, capacity: 128 }) {
+function nativeFixture(status = { status: 2, capacity: 128 }, detected = 'Ndef') {
   const calls = [];
   const manager = {
     async start() { calls.push('start'); }, async isSupported() { return true; }, async isEnabled() { return true; },
-    async requestTechnology(tech) { calls.push(['request', tech]); },
+    async requestTechnology(tech, options) { calls.push(['request', tech, options]); return detected; },
     async cancelTechnologyRequest() { calls.push('cancel'); },
     async setAlertMessageIOS() {},
     ndefHandler: {
       async getNdefStatus() { calls.push('status'); return status; },
       async writeNdefMessage(bytes) { calls.push(['write', bytes]); },
     },
+    ndefFormatableHandlerAndroid: { async formatNdef(bytes) { calls.push(['format', bytes]); } },
   };
-  const nfc = { __esModule: true, default: manager, NfcTech: { Ndef: 'Ndef' }, NdefStatus: { ReadWrite: 2 }, Ndef: { uriRecord: url => ({ url }), encodeMessage: records => [1, 2, records[0].url.length] } };
+  const nfc = { __esModule: true, default: manager, NfcTech: { Ndef: 'Ndef', NdefFormatable: 'NdefFormatable' }, NdefStatus: { ReadWrite: 2 }, NfcAdapter: { FLAG_READER_NFC_A: 1, FLAG_READER_NFC_B: 2, FLAG_READER_NFC_F: 4, FLAG_READER_NFC_V: 8 }, Ndef: { uriRecord: url => ({ url }), encodeMessage: records => [1, 2, records[0].url.length] } };
   return { calls, service: load('src/services/nfc.native.ts', { 'react-native': { Platform: { OS: 'android' } }, 'react-native-nfc-manager': nfc }) };
 }
 
 test('NFC registration writes the issued URL and closes the NFC session', async () => {
   const { service, calls } = nativeFixture();
   await service.writeAttendanceUrl('https://refit.team/nfc/attendance?token=abc');
+  assert.deepEqual(calls.find(call => Array.isArray(call) && call[0] === 'request'), ['request', ['Ndef', 'NdefFormatable'], { isReaderModeEnabled: true, readerModeFlags: 15 }]);
   assert.deepEqual(calls.slice(-3), ['status', ['write', [1, 2, 43]], 'cancel']);
+});
+
+test('Android formats an NDEF-formatable tag with the issued URL', async () => {
+  const { service, calls } = nativeFixture({ status: 2, capacity: 128 }, 'NdefFormatable');
+  await service.writeAttendanceUrl('https://refit.team/nfc/attendance?token=abc');
+  assert.deepEqual(calls.slice(-2), [['format', [1, 2, 43]], 'cancel']);
+  assert.equal(calls.includes('status'), false);
+});
+
+test('unsupported detected tags show an error instead of attempting a write', async () => {
+  const { service, calls } = nativeFixture({ status: 2, capacity: 128 }, null);
+  await assert.rejects(service.writeAttendanceUrl('https://refit.team/nfc/attendance?token=abc'), /기록할 수 없어요/);
+  assert.equal(calls.at(-1), 'cancel');
+  assert.equal(calls.some(call => Array.isArray(call) && (call[0] === 'write' || call[0] === 'format')), false);
+});
+
+test('an undetected tag stops waiting and releases the NFC session', async () => {
+  const { service, calls } = nativeFixture({ status: 2, capacity: 128 }, new Promise(() => {}));
+  const original = global.setTimeout;
+  global.setTimeout = (fn, ms, ...args) => original(fn, ms === 30000 ? 5 : ms, ...args);
+  try {
+    await assert.rejects(service.writeAttendanceUrl('https://refit.team/nfc/attendance?token=abc'), /태그를 찾지 못했어요/);
+    assert.equal(calls.at(-1), 'cancel');
+  } finally { global.setTimeout = original; }
 });
 
 test('read-only or too-small tags are not overwritten and sessions close', async () => {

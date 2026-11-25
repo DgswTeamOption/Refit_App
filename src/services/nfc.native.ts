@@ -14,17 +14,28 @@ export async function writeAttendanceUrl(url: string, signal?: AbortSignal): Pro
   const checkCancelled = () => { if (signal?.aborted) throw new Error('태그 인식을 취소했어요.'); };
   checkCancelled();
   await checkNfcWriteSupport();
-  const { default: manager, Ndef, NdefStatus, NfcTech } = await import('react-native-nfc-manager');
+  const { default: manager, Ndef, NdefStatus, NfcTech, NfcAdapter } = await import('react-native-nfc-manager');
   checkCancelled();
   const bytes = Ndef.encodeMessage([Ndef.uriRecord(url)]);
   let requested = false;
+  let timer: ReturnType<typeof setTimeout> | undefined;
   const cancel = () => { if (requested) void manager.cancelTechnologyRequest().catch(() => {}); };
   signal?.addEventListener('abort', cancel, { once: true });
   try {
     checkCancelled();
     requested = true;
-    await manager.requestTechnology(NfcTech.Ndef, { alertMessage: '등록할 NFC 태그에 아이폰 윗부분을 가까이 대주세요.' });
+    const tech = Platform.OS === 'android' ? [NfcTech.Ndef, NfcTech.NdefFormatable] : NfcTech.Ndef;
+    const options = Platform.OS === 'android' ? { isReaderModeEnabled: true, readerModeFlags: NfcAdapter.FLAG_READER_NFC_A | NfcAdapter.FLAG_READER_NFC_B | NfcAdapter.FLAG_READER_NFC_F | NfcAdapter.FLAG_READER_NFC_V } : { alertMessage: '등록할 NFC 태그에 아이폰 윗부분을 가까이 대주세요.' };
+    const timeout = new Promise<never>((_, reject) => { timer = setTimeout(() => reject(new Error('태그를 찾지 못했어요. 휴대폰 뒷면에 태그를 다시 대주세요.')), 30000); });
+    const detected = await Promise.race([manager.requestTechnology(tech, options), timeout]);
+    clearTimeout(timer);
+    timer = undefined;
     checkCancelled();
+    if (Platform.OS === 'android' && !detected) throw new Error('이 NFC 태그에는 출석 주소를 기록할 수 없어요.');
+    if (Platform.OS === 'android' && detected === NfcTech.NdefFormatable) {
+      await manager.ndefFormatableHandlerAndroid.formatNdef(bytes);
+      return;
+    }
     const status = await manager.ndefHandler.getNdefStatus();
     checkCancelled();
     if (status.status !== NdefStatus.ReadWrite) throw new Error('쓰기 가능한 NFC 태그가 아니에요.');
@@ -34,7 +45,7 @@ export async function writeAttendanceUrl(url: string, signal?: AbortSignal): Pro
   } catch (error) {
     if (signal?.aborted) throw new Error('태그 인식을 취소했어요. 다시 시도할 수 있어요.');
     throw error;
-  } finally { signal?.removeEventListener('abort', cancel); if (requested) await manager.cancelTechnologyRequest().catch(() => {}); }
+  } finally { if (timer) clearTimeout(timer); signal?.removeEventListener('abort', cancel); if (requested) await manager.cancelTechnologyRequest().catch(() => {}); }
 }
 
 export async function readAttendanceToken(): Promise<string> {
