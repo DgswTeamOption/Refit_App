@@ -5,7 +5,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { queryChatbot, type ChatbotResponse } from '../services/chatbot';
 import type { ClassSummary } from './ClassCards';
 
-type Conversation = { id: number; question: string; classId?: number; className?: string; answer?: ChatbotResponse; error?: string };
+type Conversation = { id: number; question: string; classId?: number; className?: string; answer?: ChatbotResponse; error?: string; chooseClass?: boolean };
 type RequestScope = { classId?: number; className?: string };
 const suggestions = [
   { title: '학생 개인 정보 한눈에 보기', question: '' },
@@ -34,6 +34,13 @@ export function RefitChatbot({ token, classes, initialOpen = false, onClose, cla
     if (!question || question.length > 200 || pending.current) return;
     setStudentPrompt(false);
     const scope = retryScope ?? (question.includes('추천') && selectedClass ? { classId: selectedClass.id, className: selectedClass.name } : {});
+    if (scope.classId && !classListStatus && !classes.some(item => item.source === 'server' && item.id === scope.classId)) {
+      const id = retryId ?? nextId.current++;
+      const item = { id, question, ...scope, error: '선택한 수업을 찾을 수 없어요. 추천 범위를 다시 선택한 뒤 질문해주세요.', chooseClass: true };
+      shouldFollow.current = true;
+      setItems(previous => retryId === undefined ? [...previous, item] : previous.map(existing => existing.id === retryId ? item : existing));
+      return;
+    }
     const controller = new AbortController();
     pending.current = controller;
     const id = retryId ?? nextId.current++;
@@ -48,7 +55,7 @@ export function RefitChatbot({ token, classes, initialOpen = false, onClose, cla
     } finally {
       if (pending.current === controller) { pending.current = null; setBusy(false); }
     }
-  }, [token, selectedClass]);
+  }, [token, selectedClass, classListStatus, classes]);
   const goHome = () => {
     const controller = pending.current;
     pending.current = null;
@@ -56,6 +63,7 @@ export function RefitChatbot({ token, classes, initialOpen = false, onClose, cla
     setBusy(false); setItems([]); setInput(''); setClassChooser(false); setStudentPrompt(false);
   };
   const close = () => { setClassChooser(false); setOpen(false); onClose?.(); };
+  const openClassChooser = useCallback(() => setClassChooser(true), []);
   return <>
     {!onClose && <Pressable accessibilityRole="button" accessibilityLabel="Refit AI 열기" onPress={() => setOpen(true)} style={styles.launcher}><Image source={require('../../assets/figma/chatbot/launcher.svg')} style={styles.launcherImage} contentFit="contain" /></Pressable>}
     <Modal visible={open} transparent animationType="fade" onRequestClose={close}>
@@ -71,7 +79,7 @@ export function RefitChatbot({ token, classes, initialOpen = false, onClose, cla
                 <Text style={styles.prompt}>무엇을 도와드릴까요?</Text>
                 {suggestions.map((item, index) => <Pressable key={item.title} accessibilityRole="button" style={styles.suggestion} onPress={() => { if (item.question) void submit(item.question); else { setStudentPrompt(true); inputRef.current?.focus(); } }}><View style={styles.number}><Text style={styles.numberText}>{String(index + 1).padStart(2, '0')}</Text></View><Text style={styles.suggestionText}>{item.title}</Text><Image source={require('../../assets/figma/chatbot/chevron.svg')} style={styles.chevron} contentFit="contain" /></Pressable>)}
               </> : <>
-                {items.map(item => <ConversationItem key={item.id} item={item} submit={submit} busy={busy} />)}
+                {items.map(item => <ConversationItem key={item.id} item={item} submit={submit} busy={busy} onChooseClass={openClassChooser} />)}
               </>}
             </ScrollView>
             <View style={styles.bottom}>
@@ -88,8 +96,8 @@ export function RefitChatbot({ token, classes, initialOpen = false, onClose, cla
   </>;
 }
 
-const ConversationItem = memo(function ConversationItem({ item, submit, busy }: { item: Conversation; submit: (question: string, scope?: RequestScope, retryId?: number) => Promise<void>; busy: boolean }) {
-  return <View><View style={styles.question}><Text style={styles.questionText}>{item.question}</Text>{!!item.className && <Text style={styles.questionScope}>추천 범위 · {item.className}</Text>}</View>{item.answer ? <Answer answer={item.answer} ask={submit} busy={busy} /> : item.error ? <View style={styles.errorBox} accessibilityRole="alert"><Text style={styles.errorText}>{item.error}</Text><Pressable accessibilityRole="button" disabled={busy} accessibilityState={{ disabled: busy }} onPress={() => void submit(item.question, { classId: item.classId, className: item.className }, item.id)}><Text style={[styles.retry, busy && styles.disabledText]}>다시 시도</Text></Pressable></View> : <View style={styles.loadingRow}><ActivityIndicator color="#009fff" /><Text style={styles.loadingText}>답변을 찾고 있어요</Text></View>}</View>;
+const ConversationItem = memo(function ConversationItem({ item, submit, busy, onChooseClass }: { item: Conversation; submit: (question: string, scope?: RequestScope, retryId?: number) => Promise<void>; busy: boolean; onChooseClass: () => void }) {
+  return <View><View style={styles.question}><Text style={styles.questionText}>{item.question}</Text>{!!item.className && <Text style={styles.questionScope}>추천 범위 · {item.className}</Text>}</View>{item.answer ? <Answer answer={item.answer} ask={submit} busy={busy} /> : item.error ? <View style={styles.errorBox} accessibilityRole="alert"><Text style={styles.errorText}>{item.error}</Text><Pressable accessibilityRole="button" disabled={busy} accessibilityState={{ disabled: busy }} onPress={() => item.chooseClass ? onChooseClass() : void submit(item.question, { classId: item.classId, className: item.className }, item.id)}><Text style={[styles.retry, busy && styles.disabledText]}>{item.chooseClass ? '추천 범위 선택' : '다시 시도'}</Text></Pressable></View> : <View style={styles.loadingRow}><ActivityIndicator color="#009fff" /><Text style={styles.loadingText}>답변을 찾고 있어요</Text></View>}</View>;
 });
 
 function Answer({ answer, ask, busy }: { answer: ChatbotResponse; ask: (question: string) => Promise<void>; busy: boolean }) {
