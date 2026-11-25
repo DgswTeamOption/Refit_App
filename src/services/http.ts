@@ -34,13 +34,21 @@ export async function requestRaw<T>(path: string, options: RequestInit = {}, acc
 export async function withRequestTimeout<T>(run: (signal: AbortSignal) => Promise<T>, timeoutMs: number, error: () => Error): Promise<T> {
   const controller = new AbortController();
   let timedOut = false;
-  const timer = setTimeout(() => { timedOut = true; controller.abort(); }, timeoutMs);
-  try { return await run(controller.signal); }
+  let timer: ReturnType<typeof setTimeout>;
+  const timeout = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => { timedOut = true; controller.abort(); reject(error()); }, timeoutMs);
+  });
+  try { return await Promise.race([run(controller.signal), timeout]); }
   catch (cause) { if (timedOut) throw error(); throw cause; }
-  finally { clearTimeout(timer); }
+  finally { clearTimeout(timer!); }
+}
+
+function throwIfAborted(signal?: AbortSignal | null): void {
+  if (signal?.aborted) { const error = new Error('요청이 취소됐어요.'); error.name = 'AbortError'; throw error; }
 }
 
 async function performRequest<T>(path: string, options: RequestInit, accessToken: string | undefined, raw: boolean, retried = false): Promise<T | undefined> {
+  throwIfAborted(options.signal);
   if (!baseUrl) throw new Error('서버 주소가 설정되지 않았어요.');
   if (!__DEV__ && !baseUrl.startsWith('https://')) throw new Error('배포 서버에는 HTTPS 주소가 필요해요.');
   const headers = new Headers(options.headers);
@@ -53,6 +61,7 @@ async function performRequest<T>(path: string, options: RequestInit, accessToken
   }
   if (response.status === 401 && accessToken) {
     const renewed = !retried && tokenRefresher ? await tokenRefresher(accessToken) : null;
+    throwIfAborted(options.signal);
     if (renewed) return performRequest<T>(path, options, renewed, raw, true);
     unauthorizedListeners.forEach(listener => listener(accessToken));
   }

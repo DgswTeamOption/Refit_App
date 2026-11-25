@@ -103,6 +103,35 @@ test('schedule timeouts allow retry and identify uncertain writes', async () => 
   } finally { global.fetch = originalFetch; }
 });
 
+test('requests time out during a stalled refresh without retrying a write later', async () => {
+  const originalFetch = global.fetch;
+  let resolveRefresh;
+  let fetchCount = 0;
+  const stop = http.setTokenRefresher(() => new Promise(resolve => { resolveRefresh = resolve; }));
+  global.fetch = async () => { fetchCount += 1; return new Response('{}', { status: 401 }); };
+  try {
+    await assert.rejects(scheduleRequest('/api/class/schedule/1', { method: 'POST' }, 'old-token', 10), /요청 결과를 확인하지 못했어요/);
+    resolveRefresh('new-token');
+    await new Promise(resolve => setImmediate(resolve));
+    assert.equal(fetchCount, 1);
+  } finally { stop(); global.fetch = originalFetch; }
+});
+
+test('a cancelled request does not log out after a delayed refresh failure', async () => {
+  const originalFetch = global.fetch;
+  let resolveRefresh;
+  let notifications = 0;
+  const stopRefresh = http.setTokenRefresher(() => new Promise(resolve => { resolveRefresh = resolve; }));
+  const stopListener = http.onUnauthorized(() => { notifications += 1; });
+  global.fetch = async () => new Response('{}', { status: 401 });
+  try {
+    await assert.rejects(scheduleRequest('/api/class/schedule/1', {}, 'old-token', 10), /시간표 조회가 지연/);
+    resolveRefresh(null);
+    await new Promise(resolve => setImmediate(resolve));
+    assert.equal(notifications, 0);
+  } finally { stopRefresh(); stopListener(); global.fetch = originalFetch; }
+});
+
 test('schedule requests use bearer authentication and server field names', async () => {
   const originalFetch = global.fetch;
   const calls = [];
