@@ -25,6 +25,6 @@ export default function ChatbotPage() {
   }, [token, teacher, userId, revision]);
   const close = () => { if (router.canGoBack()) router.back(); else router.replace('/home'); };
   if (!token || !teacher) return <SafeAreaView style={{ flex: 1, backgroundColor: '#fff' }}><View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}><Text style={{ color: '#777' }}>선생님 계정으로 로그인해야 사용할 수 있어요.</Text><Pressable accessibilityRole="button" onPress={close}><Text style={{ color: '#0099ff', marginTop: 16 }}>돌아가기</Text></Pressable></View></SafeAreaView>;
-  if (!result || result.userId !== userId || result.error) return <SafeAreaView style={{ flex: 1, backgroundColor: '#fff' }}><View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}><Text style={{ color: '#777' }}>{result && result.userId === userId ? result.error : '불러오는 중이에요.'}</Text>{result && result.userId === userId && !!result.error && <Pressable accessibilityRole="button" onPress={() => { setResult(null); setRevision(value => value + 1); }}><Text style={{ color: '#0099ff', marginTop: 16 }}>다시 시도</Text></Pressable>}<Pressable accessibilityRole="button" onPress={close}><Text style={{ color: '#777', marginTop: 16 }}>돌아가기</Text></Pressable></View></SafeAreaView>;
-  return <RefitChatbot key={session.user.id} token={token} classes={result.classes ?? []} initialOpen onClose={close} />;
+  const current = result?.userId === userId ? result : null;
+  return <RefitChatbot key={session.user.id} token={token} classes={current?.classes ?? []} initialOpen onClose={close} classListStatus={current?.error ?? (!current ? '수업 목록을 불러오는 중이에요.' : undefined)} onRetryClasses={current?.error ? () => { setResult(null); setRevision(value => value + 1); } : undefined} />;
 }
