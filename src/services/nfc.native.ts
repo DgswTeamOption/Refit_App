@@ -19,7 +19,9 @@ export async function writeAttendanceUrl(url: string, signal?: AbortSignal): Pro
   const bytes = Ndef.encodeMessage([Ndef.uriRecord(url)]);
   let requested = false;
   let timer: ReturnType<typeof setTimeout> | undefined;
-  const cancel = () => { if (requested) void manager.cancelTechnologyRequest().catch(() => {}); };
+  let cancelling: Promise<void> | undefined;
+  const stop = () => requested ? (cancelling ??= manager.cancelTechnologyRequest().catch(() => {})) : Promise.resolve();
+  const cancel = () => { void stop(); };
   signal?.addEventListener('abort', cancel, { once: true });
   try {
     checkCancelled();
@@ -45,22 +47,37 @@ export async function writeAttendanceUrl(url: string, signal?: AbortSignal): Pro
   } catch (error) {
     if (signal?.aborted) throw new Error('태그 인식을 취소했어요. 다시 시도할 수 있어요.');
     throw error;
-  } finally { if (timer) clearTimeout(timer); signal?.removeEventListener('abort', cancel); if (requested) await manager.cancelTechnologyRequest().catch(() => {}); }
+  } finally { if (timer) clearTimeout(timer); signal?.removeEventListener('abort', cancel); await stop(); }
 }
 
-export async function readAttendanceToken(): Promise<string> {
+export async function readAttendanceToken(signal?: AbortSignal): Promise<string> {
   let requested = false;
   let NfcManager: typeof import('react-native-nfc-manager').default | undefined;
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  let cancelling: Promise<void> | undefined;
+  const checkCancelled = () => { if (signal?.aborted) throw new Error('태그 인식을 취소했어요.'); };
+  const stop = () => requested && NfcManager ? (cancelling ??= NfcManager.cancelTechnologyRequest().catch(() => {})) : Promise.resolve();
+  const cancel = () => { void stop(); };
   try {
+    checkCancelled();
     const nfc = await import('react-native-nfc-manager').catch(() => null);
     if (!nfc) throw new Error('NFC는 개발 빌드에서만 사용할 수 있어요. (Expo Go 미지원)');
-    const { Ndef, NfcTech } = nfc;
+    const { Ndef, NfcTech, NfcAdapter } = nfc;
     NfcManager = nfc.default;
     await NfcManager.start();
     if (!await NfcManager.isSupported()) throw new Error('이 기기는 NFC를 지원하지 않아요.');
+    if (Platform.OS === 'android' && !await NfcManager.isEnabled()) throw new Error('휴대폰 설정에서 NFC를 켜주세요.');
+    checkCancelled();
+    signal?.addEventListener('abort', cancel, { once: true });
     requested = true;
-    await NfcManager.requestTechnology(NfcTech.Ndef);
+    const options = Platform.OS === 'android' ? { isReaderModeEnabled: true, readerModeFlags: NfcAdapter.FLAG_READER_NFC_A | NfcAdapter.FLAG_READER_NFC_B | NfcAdapter.FLAG_READER_NFC_F | NfcAdapter.FLAG_READER_NFC_V } : { alertMessage: '출석 태그에 아이폰 윗부분을 가까이 대주세요.' };
+    const timeout = new Promise<never>((_, reject) => { timer = setTimeout(() => reject(new Error('태그를 찾지 못했어요. 다시 시도해주세요.')), 30000); });
+    const detected = await Promise.race([NfcManager.requestTechnology(NfcTech.Ndef, options), timeout]);
+    clearTimeout(timer); timer = undefined;
+    checkCancelled();
+    if (Platform.OS === 'android' && !detected) throw new Error('출석 주소가 기록된 NFC 태그가 아니에요.');
     const tag = await NfcManager.getTag();
+    checkCancelled();
     for (const record of tag?.ndefMessage ?? []) {
       let value = '';
       if (Ndef.isType(record, Ndef.TNF_WELL_KNOWN, Ndef.RTD_TEXT)) value = Ndef.text.decodePayload(new Uint8Array(record.payload));
@@ -69,5 +86,8 @@ export async function readAttendanceToken(): Promise<string> {
       if (value && value.length <= 64) return value;
     }
     throw new Error('태그에서 출석 토큰을 읽지 못했어요.');
-  } finally { if (requested) await NfcManager?.cancelTechnologyRequest().catch(() => {}); }
+  } catch (error) {
+    if (signal?.aborted) throw new Error('태그 인식을 취소했어요.');
+    throw error;
+  } finally { if (timer) clearTimeout(timer); signal?.removeEventListener('abort', cancel); await stop(); }
 }

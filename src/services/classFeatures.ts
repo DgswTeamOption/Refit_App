@@ -1,4 +1,4 @@
-import { jsonBody, request } from './http';
+import { jsonBody, request, withRequestTimeout } from './http';
 
 export type ServerNotice = { noticeId: number; classId: number; writerId: number; title: string; content: string; createdAt: string };
 export type Attendance = { id: number; class_id: number; schedule_id: number; student_id: number; attendance_date: string; status: 'PRESENT' | 'ABSENT' | 'LATE' | 'NOT_CHECKED' };
@@ -11,7 +11,7 @@ export const noticeApi = {
   remove: (id: number, noticeId: string, token: string) => request<void>(`/api/class/notice/${id}/${noticeId}`, { method: 'DELETE' }, token),
 };
 export const attendanceApi = {
-  nfc: (tagToken: string, scheduleId: number, token: string) => request<Attendance>('/api/class/nfc/attendance', { method: 'POST', ...jsonBody({ token: tagToken, schedule_id: scheduleId }) }, token),
+  nfc: (tagToken: string, scheduleId: number, token: string) => withRequestTimeout(signal => request<Attendance>('/api/class/nfc/attendance', { method: 'POST', ...jsonBody({ token: tagToken, schedule_id: scheduleId }), signal }, token), 20000, () => new Error('출석 결과를 확인하지 못했어요. 출석 내역을 확인한 뒤 다시 시도해주세요.')),
   mine: (id: number, year: number, month: number, token: string) => request<Attendance[]>(`/api/class/attendance/${id}/me?year=${year}&month=${month}`, {}, token),
   list: (id: number, date: string, token: string) => request<AttendanceRow[]>(`/api/class/attendance/${id}?date=${date}`, {}, token),
   stats: (id: number, year: number, month: number, token: string) => request<AttendanceStats[]>(`/api/class/attendance/stats/${id}?year=${year}&month=${month}`, {}, token),

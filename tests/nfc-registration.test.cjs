@@ -18,6 +18,7 @@ function nativeFixture(status = { status: 2, capacity: 128 }, detected = 'Ndef')
     async start() { calls.push('start'); }, async isSupported() { return true; }, async isEnabled() { return true; },
     async requestTechnology(tech, options) { calls.push(['request', tech, options]); return detected; },
     async cancelTechnologyRequest() { calls.push('cancel'); },
+    async getTag() { return { ndefMessage: [{ tnf: 1, type: 'U', payload: [1] }] }; },
     async setAlertMessageIOS() {},
     ndefHandler: {
       async getNdefStatus() { calls.push('status'); return status; },
@@ -25,8 +26,8 @@ function nativeFixture(status = { status: 2, capacity: 128 }, detected = 'Ndef')
     },
     ndefFormatableHandlerAndroid: { async formatNdef(bytes) { calls.push(['format', bytes]); } },
   };
-  const nfc = { __esModule: true, default: manager, NfcTech: { Ndef: 'Ndef', NdefFormatable: 'NdefFormatable' }, NdefStatus: { ReadWrite: 2 }, NfcAdapter: { FLAG_READER_NFC_A: 1, FLAG_READER_NFC_B: 2, FLAG_READER_NFC_F: 4, FLAG_READER_NFC_V: 8 }, Ndef: { uriRecord: url => ({ url }), encodeMessage: records => [1, 2, records[0].url.length] } };
-  return { calls, service: load('src/services/nfc.native.ts', { 'react-native': { Platform: { OS: 'android' } }, 'react-native-nfc-manager': nfc }) };
+  const nfc = { __esModule: true, default: manager, NfcTech: { Ndef: 'Ndef', NdefFormatable: 'NdefFormatable' }, NdefStatus: { ReadWrite: 2 }, NfcAdapter: { FLAG_READER_NFC_A: 1, FLAG_READER_NFC_B: 2, FLAG_READER_NFC_F: 4, FLAG_READER_NFC_V: 8 }, Ndef: { uriRecord: url => ({ url }), encodeMessage: records => [1, 2, records[0].url.length], TNF_WELL_KNOWN: 1, RTD_TEXT: 'T', RTD_URI: 'U', isType: (record, tnf, type) => record.tnf === tnf && record.type === type, uri: { decodePayload: () => 'https://refit.team/nfc/attendance?token=abc' } } };
+  return { calls, manager, service: load('src/services/nfc.native.ts', { 'react-native': { Platform: { OS: 'android' } }, 'react-native-nfc-manager': nfc }) };
 }
 
 test('NFC registration writes the issued URL and closes the NFC session', async () => {
@@ -75,6 +76,50 @@ test('a cancelled registration does not start a tag session', async () => {
   controller.abort();
   await assert.rejects(service.writeAttendanceUrl('https://refit.team/nfc/attendance?token=abc', controller.signal), /취소/);
   assert.equal(calls.length, 0);
+});
+
+test('student attendance reads the issued token in Android reader mode', async () => {
+  const { service, calls } = nativeFixture();
+  assert.equal(await service.readAttendanceToken(), 'abc');
+  assert.deepEqual(calls.find(call => Array.isArray(call) && call[0] === 'request'), ['request', 'Ndef', { isReaderModeEnabled: true, readerModeFlags: 15 }]);
+  assert.equal(calls.at(-1), 'cancel');
+});
+
+test('cancelling an active NFC scan closes the reader only once', async () => {
+  const { service, calls, manager } = nativeFixture();
+  let rejectRequest;
+  let started;
+  const startedPromise = new Promise(resolve => { started = resolve; });
+  manager.requestTechnology = async () => { started(); return new Promise((_, reject) => { rejectRequest = reject; }); };
+  manager.cancelTechnologyRequest = async () => { calls.push('cancel'); rejectRequest(new Error('cancelled')); };
+  const controller = new AbortController();
+  const reading = service.readAttendanceToken(controller.signal);
+  await startedPromise;
+  controller.abort();
+  await assert.rejects(reading, /취소/);
+  assert.equal(calls.filter(item => item === 'cancel').length, 1);
+});
+
+test('attendance offers only the student’s regular and approved makeup sessions', () => {
+  const schedule = load('src/services/schedule.ts', { './http': {} });
+  const { nfcAttendanceChoices, validateNfcMakeups } = load('src/services/nfcAttendance.ts', { './schedule': schedule });
+  const now = new Date(2026, 10, 25, 15, 0);
+  const schedules = [
+    { scheduleId: 10, classId: 1, studentId: 7, startTime: '2026-11-25 15:00:00', endTime: '2026-11-25 16:00:00' },
+    { scheduleId: 11, classId: 1, studentId: 7, startTime: '2026-11-20 14:00:00', endTime: '2026-11-20 15:00:00' },
+    { scheduleId: 12, classId: 1, studentId: 8, startTime: '2026-11-25 15:00:00', endTime: '2026-11-25 16:00:00' },
+  ];
+  const makeups = [
+    { id: 1, class_id: 1, student_id: 7, schedule_id: 11, approval_status: 1, makeup_time: '2026-11-25T17:00:00' },
+    { id: 2, class_id: 1, student_id: 7, schedule_id: 11, approval_status: 0, makeup_time: '2026-11-25T18:00:00' },
+    { id: 3, class_id: 1, student_id: 8, schedule_id: 11, approval_status: 1, makeup_time: '2026-11-25T19:00:00' },
+  ];
+  const choices = nfcAttendanceChoices(schedules, makeups, 1, 7, now);
+  assert.deepEqual(choices.map(item => item.scheduleId), [10, 11]);
+  assert.match(choices[1].label, /보강 수업.*17:00.*18:00/);
+  assert.throws(() => validateNfcMakeups([null], 1, 7), /확인할 수 없어요/);
+  assert.throws(() => validateNfcMakeups([makeups[2]], 1, 7), /확인할 수 없어요/);
+  assert.deepEqual(validateNfcMakeups(makeups.slice(0, 2), 1, 7), makeups.slice(0, 2));
 });
 
 test('issued registration survives restart and is isolated by teacher and class', async () => {
